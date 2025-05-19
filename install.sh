@@ -1,20 +1,10 @@
 #!/bin/bash
 
-# Простой скрипт для приветствия и проверки свободного места на диске
-
-# Вывод приветствия
-echo "Привет, $USER!"
-
-# Проверка текущей даты
 echo "Сегодня: $(date)"
-
-# Проверка свободного места на диске
 echo "Свободное место на диске:"
 df -h / | tail -1
 
-# Проверка, существует ли директория /tmp
-if [ -d "/tmp" ]; then
-    echo "Директория /tmp существует"
-else
-    echo "Директория /tmp не найдена"
-fi
+curl -L -o gkart.zip https://github.com/mitrichevgeorge/kart/archive/refs/heads/main.zip
+unzip gkart.zip
+rm -f gkart.zip
+cd kart-main
