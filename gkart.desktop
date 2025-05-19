@@ -1,0 +1,8 @@
+[Desktop Entry]
+Version=1.0
+Name=Kart
+Exec=/bin/bash ~/bin/gkart
+Type=Application
+Icon=~/kart-main/icon.png
+Terminal=false
+Comment=2D гонки
