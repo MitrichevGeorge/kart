@@ -17,5 +17,5 @@ mkdir -p ~/.local/share/applications
 cp gkart.desktop ~/.local/share/applications/
 cp gkart.desktop ~/Desktop/
 
-
+echo -e "\033c"
 echo "Установка завершена"
