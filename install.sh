@@ -14,9 +14,9 @@ mv kart-main/run.sh ~/bin/gkart
 chmod +x ~/bin/gkart
 
 mkdir -p ~/.local/share/applications
-cp gkart.desktop ~/.local/share/applications/
+cp kart-main/gkart.desktop ~/.local/share/applications/
 chmod +x ~/.local/share/applications/gkart.desktop
-cp gkart.desktop ~/'Рабочий стол'/
+cp kart-main/gkart.desktop ~/'Рабочий стол'/
 chmod +x ~/Desktop/gkart.desktop
 
 echo -e "\033c"
