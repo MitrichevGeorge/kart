@@ -10,7 +10,7 @@ unzip gkart.zip
 rm -f gkart.zip
 
 mkdir -p ~/bin
-mv kart-main/run.sh ~/bin/gkart
+cp kart-main/run.sh ~/bin/gkart
 chmod +x ~/bin/gkart
 
 mkdir -p ~/.local/share/applications
