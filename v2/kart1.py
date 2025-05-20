@@ -9,6 +9,7 @@ import uuid
 import os
 import random
 from collections import deque
+from particles import Explosion, DamagePopup, SmokeParticle, SparkParticle, NitroFlameParticle
 
 # Инициализация Pygame
 pygame.init()
@@ -37,6 +38,10 @@ WHEEL_COLOR = (100, 100, 100)
 WHEEL_ACTIVE_COLOR = (0, 255, 0)
 TRAIL_COLOR = (80, 80, 80)
 BURNT_COLOR = (50, 50, 50)
+ARROW_COLOR = (255, 255, 0, 128)  # Yellow with 50% opacity
+ARROW_LENGTH = 20
+ARROW_THICKNESS = 3
+ARROW_OFFSET = CAR_WIDTH  # Distance from car center to start of arrow
 
 # Физические параметры
 ACCELERATION = 0.3
@@ -53,6 +58,7 @@ TRAIL_FADE_RATE = 0.99
 MIN_SPEED_FOR_TURN = 0.5
 LOW_SPEED_TURN_FACTOR = 0.3
 HIGH_SPEED_DRIFT_FACTOR = 0.3
+DRIFT_FACTOR_ON_SHIFT = 0.8
 CAR_COLLISION_BOUNCE = 0.5
 MIN_SPAWN_DISTANCE = 30
 BLEND_FACTOR = 0.5
@@ -61,8 +67,9 @@ DAMAGE_SCALING = 0.5
 SPAWN_PROTECTION_TIME = 2.0
 HEALTH_BAR_WIDTH = 40
 HEALTH_BAR_HEIGHT = 6
-HEALTH_BAR_OFFSET = 0  # Reduced from 40 to move closer
-NAME_OFFSET = 30        # New constant for name position
+HEALTH_BAR_OFFSET = 0
+NITRO_BAR_OFFSET = 8
+NAME_OFFSET = 30
 SMOKE_HEALTH_THRESHOLD = 9
 SMOKE_EMISSION_RATE = 0.1
 SMOKE_LIFETIME = 1.0
@@ -71,7 +78,20 @@ POPUP_LIFETIME = 1.0
 POPUP_SPEED = 20
 EXPLOSION_LIFETIME = 0.5
 EXPLOSION_SIZE = 40
-CORPSE_LIFETIME = 3.0  # Time the burnt corpse persists
+CORPSE_LIFETIME = 3.0
+SPARK_EMISSION_RATE = 0.1
+SPARK_LIFETIME = 0.3
+SPARK_SPEED = 15
+SPARK_ALPHA_THRESHOLD = 50
+NITRO_MAX = 100
+NITRO_REGEN_RATE = 10
+NITRO_CONSUMPTION_RATE = 50
+NITRO_BOOST_FACTOR = 3.0
+NITRO_LOW_THRESHOLD = 10
+NITRO_LOW_SLOWDOWN = 0.7
+NITRO_LOW_DAMAGE = 0.5
+NITRO_FLAME_EMISSION_RATE = 0.05
+NITRO_VISIBILITY_THRESHOLD = 0.95
 
 # Поверхность для следов
 trail_surface = pygame.Surface((MAP_WIDTH, MAP_HEIGHT), pygame.SRCALPHA)
@@ -91,6 +111,7 @@ connection_attempts = 0
 MAX_CONNECTION_ATTEMPTS = 3
 connection_established = False
 is_paused = False
+is_game_paused = False
 
 # Predefined colors
 COLOR_OPTIONS = [
@@ -99,77 +120,29 @@ COLOR_OPTIONS = [
     (128, 128, 128)
 ]
 
-class Explosion:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-        self.start_time = time.time()
-        self.lifetime = EXPLOSION_LIFETIME
+# Checkpoint data
+checkpoints = {}
+total_checkpoints = 0
 
-    def update(self, delta_time):
-        elapsed = time.time() - self.start_time
-        return elapsed < self.lifetime
+def find_checkpoints():
+    global checkpoints, total_checkpoints
+    checkpoints = {}
+    for y in range(MAP_HEIGHT):
+        for x in range(MAP_WIDTH):
+            color = map_image.get_at((x, y))[:3]
+            if color[0] == 0 and color[2] == 0 and color[1] > 0:
+                checkpoint_num = color[1]
+                if checkpoint_num not in checkpoints:
+                    checkpoints[checkpoint_num] = []
+                checkpoints[checkpoint_num].append((x, y))
+    total_checkpoints = len(checkpoints)
+    sorted_checkpoints = {}
+    for num in sorted(checkpoints.keys()):
+        sorted_checkpoints[num] = checkpoints[num]
+    checkpoints = sorted_checkpoints
 
-    def draw(self, screen, camera):
-        if not self.update(0):
-            return
-        elapsed = time.time() - self.start_time
-        alpha = max(0, 255 * (1 - elapsed / self.lifetime))
-        size = EXPLOSION_SIZE * (elapsed / self.lifetime)
-        surface = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
-        pygame.draw.circle(surface, (255, 100, 0, int(alpha)), (size, size), size)
-        screen_pos = camera.apply_transform(None, (self.x, self.y))
-        screen.blit(surface, (screen_pos[0] - size, screen_pos[1] - size))
-
-class DamagePopup:
-    def __init__(self, x, y, damage):
-        self.x = x
-        self.y = y
-        self.damage = round(damage, 1)
-        self.velocity_y = -POPUP_SPEED
-        self.alpha = 255
-        self.lifetime = POPUP_LIFETIME
-        self.start_time = time.time()
-
-    def update(self, delta_time):
-        self.y += self.velocity_y * delta_time
-        elapsed = time.time() - self.start_time
-        self.alpha = max(0, 255 * (1 - elapsed / self.lifetime))
-        return elapsed < self.lifetime
-
-    def draw(self, screen, camera):
-        if self.alpha > 0:
-            text = font.render(str(self.damage), True, (255, 0, 0))
-            text.set_alpha(int(self.alpha))
-            screen_pos = camera.apply_transform(None, (self.x, self.y))
-            screen.blit(text, (screen_pos[0] - text.get_width() // 2, screen_pos[1]))
-
-class SmokeParticle:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-        angle = random.uniform(0, 2 * math.pi)
-        speed = random.uniform(SMOKE_SPEED * 0.5, SMOKE_SPEED)
-        self.velocity_x = math.cos(angle) * speed
-        self.velocity_y = math.sin(angle) * speed
-        self.size = random.uniform(5, 10)
-        self.alpha = 100
-        self.lifetime = SMOKE_LIFETIME
-        self.start_time = time.time()
-
-    def update(self, delta_time):
-        self.x += self.velocity_x * delta_time
-        self.y += self.velocity_y * delta_time
-        elapsed = time.time() - self.start_time
-        self.alpha = max(0, 100 * (1 - elapsed / self.lifetime))
-        return elapsed < self.lifetime
-
-    def draw(self, screen, camera):
-        if self.alpha > 0:
-            surface = pygame.Surface((self.size * 2, self.size * 2), pygame.SRCALPHA)
-            pygame.draw.circle(surface, (100, 100, 100, int(self.alpha)), (self.size, self.size), self.size)
-            screen_pos = camera.apply_transform(None, (self.x, self.y))
-            screen.blit(surface, (screen_pos[0] - self.size, screen_pos[1] - self.size))
+# Find checkpoints at startup
+find_checkpoints()
 
 class Camera:
     def __init__(self):
@@ -251,6 +224,21 @@ def draw_health_bar(screen, camera, x, y, health, max_health):
     if health_ratio > 0:
         health_rect = pygame.Rect(screen_pos[0] - HEALTH_BAR_WIDTH // 2, screen_pos[1] - HEALTH_BAR_HEIGHT // 2, bar_width, HEALTH_BAR_HEIGHT)
         pygame.draw.rect(screen, color, health_rect, border_radius=HEALTH_BAR_HEIGHT // 2)
+
+def draw_nitro_bar(screen, camera, x, y, nitro, max_nitro):
+    nitro_ratio = max(0, min(1, nitro / max_nitro))
+    bar_width = HEALTH_BAR_WIDTH * nitro_ratio
+    color = (0, 191, 255)
+    
+    center_x, center_y = x - CAR_WIDTH // 2 + HEALTH_BAR_WIDTH // 2, y - CAR_HEIGHT - NITRO_BAR_OFFSET
+    screen_pos = camera.apply_transform(None, (center_x, center_y))
+    
+    bg_rect = pygame.Rect(screen_pos[0] - HEALTH_BAR_WIDTH // 2, screen_pos[1] - HEALTH_BAR_HEIGHT // 2, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT)
+    pygame.draw.rect(screen, (50, 50, 50), bg_rect, border_radius=HEALTH_BAR_HEIGHT // 2)
+    
+    if nitro_ratio > 0:
+        nitro_rect = pygame.Rect(screen_pos[0] - HEALTH_BAR_WIDTH // 2, screen_pos[1] - HEALTH_BAR_HEIGHT // 2, bar_width, HEALTH_BAR_HEIGHT)
+        pygame.draw.rect(screen, color, nitro_rect, border_radius=HEALTH_BAR_HEIGHT // 2)
 
 def render_text_with_outline(text, font, color, pos, camera=None):
     inv_color = (255 - color[0], 255 - color[1], 255 - color[2])
@@ -348,17 +336,18 @@ def show_start_screen():
             cursor_visible = not cursor_visible
             cursor_timer = 0
 
-def show_connection_screen():
-    global screen, WINDOW_WIDTH, WINDOW_HEIGHT, connection_established
+def show_connection_screen(attempt_number):
+    global screen, WINDOW_WIDTH, WINDOW_HEIGHT, connection_established, connection_attempts
     dots = ""
     start_time = time.time()
-    while not connection_established:
+    max_wait_time = 5.0
+    while not connection_established and (time.time() - start_time) < max_wait_time:
         screen.fill((50, 50, 50))
         
         elapsed = time.time() - start_time
         dots = "." * (int(elapsed * 2) % 4)
         
-        text = font_large.render(f"Connecting to server{dots}", True, (255, 255, 255))
+        text = font_large.render(f"Connecting to server (Attempt {attempt_number}){dots}", True, (255, 255, 255))
         screen.blit(text, (WINDOW_WIDTH // 2 - text.get_width() // 2, WINDOW_HEIGHT // 2))
         
         pygame.display.flip()
@@ -370,12 +359,20 @@ def show_connection_screen():
             elif event.type == pygame.VIDEORESIZE:
                 WINDOW_WIDTH, WINDOW_HEIGHT = event.w, event.h
                 screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.RESIZABLE)
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    return False
         
         time.sleep(0.1)
+    
+    if not connection_established:
+        connection_attempts = 0
+        return False
+    return True
 
 def show_connection_lost_screen():
     global screen, WINDOW_WIDTH, WINDOW_HEIGHT
-    text = font_large.render("Connection to server...", True, (255, 255, 255))
+    text = font_large.render("Connection to server lost...", True, (255, 255, 255))
     screen.blit(text, (WINDOW_WIDTH // 2 - text.get_width() // 2, WINDOW_HEIGHT // 2))
 
 def show_death_screen():
@@ -390,10 +387,34 @@ def show_death_screen():
     screen.blit(death_text, (WINDOW_WIDTH // 2 - death_text.get_width() // 2, WINDOW_HEIGHT // 2 - 50))
     screen.blit(respawn_text, (WINDOW_WIDTH // 2 - respawn_text.get_width() // 2, WINDOW_HEIGHT // 2 + 20))
 
+def show_pause_menu():
+    global screen, WINDOW_WIDTH, WINDOW_HEIGHT
+    overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 128))
+    screen.blit(overlay, (0, 0))
+
+    button_width = 150
+    button_height = 50
+    continue_button = pygame.Rect(WINDOW_WIDTH // 2 - button_width // 2, WINDOW_HEIGHT // 2 - button_height - 10, button_width, button_height)
+    exit_button = pygame.Rect(WINDOW_WIDTH // 2 - button_width // 2, WINDOW_HEIGHT // 2 + 10, button_width, button_height)
+
+    pygame.draw.rect(screen, (0, 200, 0), continue_button)
+    pygame.draw.rect(screen, (200, 0, 0), exit_button)
+
+    continue_text = font.render("Continue", True, (255, 255, 255))
+    exit_text = font.render("Exit to Menu", True, (255, 255, 255))
+
+    screen.blit(continue_text, (continue_button.x + (button_width - continue_text.get_width()) // 2,
+                               continue_button.y + (button_height - continue_text.get_height()) // 2))
+    screen.blit(exit_text, (exit_button.x + (button_width - exit_text.get_width()) // 2,
+                           exit_button.y + (button_height - exit_text.get_height()) // 2))
+
+    return continue_button, exit_button
+
 def network_thread(local_car, player_name, player_color):
-    global other_players, ping_times, connection_attempts, connection_established, is_paused
+    global other_players, ping_times, connection_attempts, connection_established, is_paused, is_game_paused
     while True:
-        if is_paused and connection_established:
+        if (is_paused or is_game_paused) and connection_established:
             time.sleep(0.1)
             continue
         try:
@@ -408,9 +429,11 @@ def network_thread(local_car, player_name, player_color):
                 'velocity_y': local_car.velocity_y,
                 'angular_velocity': local_car.angular_velocity,
                 'checkpoints_passed': local_car.checkpoints_passed,
+                'lap_count': local_car.lap_count,
                 'health': local_car.health,
                 'is_dead': local_car.is_dead,
-                'death_time': local_car.death_time if local_car.is_dead else 0
+                'death_time': local_car.death_time if local_car.is_dead else 0,
+                'nitro': local_car.nitro
             }
             payload = {
                 'player_id': PLAYER_ID,
@@ -449,6 +472,8 @@ def network_thread(local_car, player_name, player_color):
                                 car.health = state.get('health', MAX_HEALTH)
                                 car.is_dead = state.get('is_dead', False)
                                 car.death_time = state.get('death_time', 0)
+                                car.nitro = state.get('nitro', NITRO_MAX)
+                                car.lap_count = state.get('lap_count', 1)
                             else:
                                 car = Car(state['x'], state['y'], state['angle'], is_local_player=False)
                                 car.velocity_x = state['velocity_x']
@@ -459,6 +484,8 @@ def network_thread(local_car, player_name, player_color):
                                 car.health = state.get('health', MAX_HEALTH)
                                 car.is_dead = state.get('is_dead', False)
                                 car.death_time = state.get('death_time', 0)
+                                car.nitro = state.get('nitro', NITRO_MAX)
+                                car.lap_count = state.get('lap_count', 1)
                             car.checkpoints_passed = state['checkpoints_passed']
                             car.color = color
                             car.name = name
@@ -470,10 +497,12 @@ def network_thread(local_car, player_name, player_color):
             else:
                 connection_attempts += 1
                 if connection_attempts >= MAX_CONNECTION_ATTEMPTS:
+                    connection_established = False
                     is_paused = True
         except requests.RequestException:
             connection_attempts += 1
             if connection_attempts >= MAX_CONNECTION_ATTEMPTS:
+                connection_established = False
                 is_paused = True
         time.sleep(1/30)
 
@@ -492,7 +521,10 @@ class Car:
         self.is_braking = False
         self.is_turning_left = False
         self.is_turning_right = False
+        self.is_drifting = False
+        self.is_using_nitro = False
         self.checkpoints_passed = 0
+        self.lap_count = 1  # Start at lap 1
         self.render_enabled = render_enabled
         self.training_mode = training_mode
         self.is_local_player = is_local_player
@@ -505,23 +537,61 @@ class Car:
             (CAR_WIDTH // 2 - 5, -CAR_HEIGHT // 2)
         ]
         self.health = MAX_HEALTH
+        self.nitro = NITRO_MAX
         self.spawn_protection = True
         self.spawn_time = time.time()
         self.spawn_x = x
         self.spawn_y = y
         self.damage_popups = []
         self.smoke_particles = []
+        self.spark_particles = []
+        self.nitro_flame_particles = []
         self.last_smoke_time = 0
+        self.last_spark_time = 0
+        self.last_nitro_flame_time = 0
         self.is_dead = False
         self.death_time = 0
         self.explosion = None
 
+    def find_next_checkpoint(self):
+        if not checkpoints:
+            return None
+        checkpoint_nums = sorted(checkpoints.keys())
+        next_checkpoint_idx = self.checkpoints_passed % len(checkpoint_nums)
+        return checkpoint_nums[next_checkpoint_idx]
+
+    def find_nearest_checkpoint_pixel(self):
+        next_checkpoint = self.find_next_checkpoint()
+        if next_checkpoint is None:
+            return None
+        min_dist = float('inf')
+        nearest_pos = None
+        for pos in checkpoints[next_checkpoint]:
+            dist = math.sqrt((self.x - pos[0])**2 + (self.y - pos[1])**2)
+            if dist < min_dist:
+                min_dist = dist
+                nearest_pos = pos
+        return nearest_pos
+
+    def check_checkpoint_collision(self):
+        next_checkpoint = self.find_next_checkpoint()
+        if next_checkpoint is None:
+            return
+        rect = pygame.Rect(self.x - CAR_WIDTH // 2, self.y - CAR_HEIGHT // 2, CAR_WIDTH, CAR_HEIGHT)
+        for pos in checkpoints[next_checkpoint]:
+            if rect.collidepoint(pos):
+                self.checkpoints_passed += 1
+                if self.checkpoints_passed == total_checkpoints:
+                    self.lap_count += 1
+                    self.checkpoints_passed = 0
+                break
+
     def update(self, keys=None):
         if self.is_dead and (time.time() - self.death_time > CORPSE_LIFETIME):
             if self.is_local_player:
-                self.is_dead = False  # Allow local player to respawn via click
+                self.is_dead = False
             else:
-                return  # Non-local players will be removed by network cleanup
+                return
         if self.is_dead:
             if self.explosion:
                 self.explosion.update(1/60)
@@ -537,15 +607,31 @@ class Car:
         speed_factor = abs(self.speed) / MAX_SPEED
 
         if self.is_local_player and keys:
-            self.is_accelerating = keys[pygame.K_UP]
-            self.is_braking = keys[pygame.K_DOWN]
-            self.is_turning_left = keys[pygame.K_LEFT]
-            self.is_turning_right = keys[pygame.K_RIGHT]
+            self.is_accelerating = keys[pygame.K_UP] or keys[pygame.K_w]
+            self.is_braking = keys[pygame.K_DOWN] or keys[pygame.K_s]
+            self.is_turning_left = keys[pygame.K_LEFT] or keys[pygame.K_a]
+            self.is_turning_right = keys[pygame.K_RIGHT] or keys[pygame.K_d]
+            self.is_drifting = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
+            self.is_using_nitro = (keys[pygame.K_LCTRL] or keys[pygame.K_RCTRL]) and (self.is_accelerating or self.is_braking)
         
         if self.is_accelerating:
             accel = ACCELERATION
         if self.is_braking:
             accel = -ACCELERATION * 0.5
+        if self.is_using_nitro and self.nitro > 0:
+            accel *= NITRO_BOOST_FACTOR
+            self.nitro = max(0, self.nitro - NITRO_CONSUMPTION_RATE * delta_time)
+        else:
+            self.nitro = min(NITRO_MAX, self.nitro + NITRO_REGEN_RATE * delta_time)
+
+        if self.nitro <= NITRO_LOW_THRESHOLD:
+            self.speed *= NITRO_LOW_SLOWDOWN
+            if not self.is_dead:
+                damage = NITRO_LOW_DAMAGE * delta_time
+                self.health = max(0, self.health - damage)
+                if damage > 0.1:
+                    self.damage_popups.append(DamagePopup(self.x, self.y, damage))
+
         if self.is_turning_left:
             turn_input = -TURN_ACCELERATION
             self.steering_angle = max(self.steering_angle - TURN_ACCELERATION, -math.pi / 6)
@@ -584,13 +670,14 @@ class Car:
 
         self.angle += self.angular_velocity * (1 - speed_factor * 0.5)
 
-        drift_scale = 1 - speed_factor * HIGH_SPEED_DRIFT_FACTOR
+        drift_factor = DRIFT_FACTOR_ON_SHIFT if self.is_drifting else HIGH_SPEED_DRIFT_FACTOR
+        drift_scale = 1 - speed_factor * drift_factor
         if speed_factor > 0.8 and abs(self.angular_velocity) > 0.01:
             self.angle += self.angular_velocity * speed_factor * 0.2
 
         direction_x = cos_angle
         direction_y = sin_angle
-        current_drift_factor = 1 - speed_factor * HIGH_SPEED_DRIFT_FACTOR
+        current_drift_factor = 1 - speed_factor * drift_factor
         self.velocity_x = self.velocity_x * current_drift_factor + direction_x * self.speed * (1 - current_drift_factor)
         self.velocity_y = self.velocity_y * current_drift_factor + direction_y * self.speed * (1 - current_drift_factor)
 
@@ -632,8 +719,22 @@ class Car:
                 self.smoke_particles.append(SmokeParticle(self.x, self.y))
                 self.last_smoke_time = current_time
 
+        if self.is_using_nitro and self.nitro > 0 and not self.training_mode and not self.is_dead:
+            current_time = time.time()
+            if current_time - self.last_nitro_flame_time >= NITRO_FLAME_EMISSION_RATE:
+                for i, (wx, wy) in enumerate(self.wheel_positions):
+                    if i < 2:
+                        wheel_x = self.x + wx * cos_angle - wy * sin_angle
+                        wheel_y = self.y + wx * sin_angle + wy * cos_angle
+                        self.nitro_flame_particles.append(NitroFlameParticle(wheel_x, wheel_y, self.angle))
+                self.last_nitro_flame_time = current_time
+
+        self.check_checkpoint_collision()
+
         self.damage_popups = [popup for popup in self.damage_popups if popup.update(delta_time)]
         self.smoke_particles = [particle for particle in self.smoke_particles if particle.update(delta_time)]
+        self.spark_particles = [particle for particle in self.spark_particles if particle.update(delta_time)]
+        self.nitro_flame_particles = [particle for particle in self.nitro_flame_particles if particle.update(delta_time)]
 
         if self.render_enabled and not self.training_mode and not self.is_dead:
             self.draw_trails()
@@ -643,13 +744,23 @@ class Car:
         trail_alpha = min(int(relative_speed / MAX_SPEED * 255 * FRICTION * 2), 255)
         cos_angle = math.cos(self.angle)
         sin_angle = math.sin(self.angle)
+        surface_color = get_surface_color(self.x, self.y)
+        current_time = time.time()
+
         for i, (wx, wy) in enumerate(self.wheel_positions):
             wheel_x = self.x + wx * cos_angle - wy * sin_angle
             wheel_y = self.y + wx * sin_angle + wy * cos_angle
+            adjusted_trail_alpha = trail_alpha
             if i >= 2 and abs(self.steering_angle) > 0.01:
-                trail_alpha = min(trail_alpha * 1.5, 255)
-            if trail_alpha > 5:
-                pygame.draw.circle(trail_surface, (*TRAIL_COLOR, trail_alpha), (int(wheel_x), int(wheel_y)), 3)
+                adjusted_trail_alpha = min(trail_alpha * 1.5, 255)
+            if adjusted_trail_alpha > 5:
+                pygame.draw.circle(trail_surface, (*TRAIL_COLOR, adjusted_trail_alpha), (int(wheel_x), int(wheel_y)), 3)
+                
+            if (self.health <= SMOKE_HEALTH_THRESHOLD and not self.training_mode and not self.is_dead and
+                surface_color == COLOR_FLOOR and adjusted_trail_alpha > SPARK_ALPHA_THRESHOLD and
+                current_time - self.last_spark_time >= SPARK_EMISSION_RATE):
+                self.spark_particles.append(SparkParticle(wheel_x, wheel_y))
+                self.last_spark_time = current_time
 
     def draw(self, camera):
         if not self.render_enabled or self.training_mode:
@@ -698,16 +809,58 @@ class Car:
                 color = WHEEL_ACTIVE_COLOR if (i < 2 and (self.is_accelerating or self.is_braking)) or (i >= 2 and (self.is_turning_left or self.is_turning_right)) else WHEEL_COLOR
                 pygame.draw.polygon(screen, color, rotated_wheel)
 
+            nearest_checkpoint = self.find_nearest_checkpoint_pixel()
+            if nearest_checkpoint:
+                car_screen_pos = camera.apply_transform(None, (self.x, self.y))
+                checkpoint_screen_pos = camera.apply_transform(None, nearest_checkpoint)
+                dx = checkpoint_screen_pos[0] - car_screen_pos[0]
+                dy = checkpoint_screen_pos[1] - car_screen_pos[1]
+                dist = math.sqrt(dx**2 + dy**2)
+                if dist > 0:
+                    norm_dx = dx / dist
+                    norm_dy = dy / dist
+                    # Offset the arrow start
+                    arrow_start = (
+                        car_screen_pos[0] + norm_dx * ARROW_OFFSET * camera.zoom,
+                        car_screen_pos[1] + norm_dy * ARROW_OFFSET * camera.zoom
+                    )
+                    arrow_end = (
+                        arrow_start[0] + norm_dx * ARROW_LENGTH * camera.zoom,
+                        arrow_start[1] + norm_dy * ARROW_LENGTH * camera.zoom
+                    )
+                    # Create a surface for the arrow
+                    arrow_surface = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+                    pygame.draw.line(arrow_surface, ARROW_COLOR, arrow_start, arrow_end, ARROW_THICKNESS)
+                    # Draw arrowhead
+                    arrowhead_angle = math.atan2(dy, dx)
+                    arrowhead1 = (
+                        arrow_end[0] - ARROW_LENGTH * 0.3 * camera.zoom * math.cos(arrowhead_angle + math.pi / 6),
+                        arrow_end[1] - ARROW_LENGTH * 0.3 * camera.zoom * math.sin(arrowhead_angle + math.pi / 6)
+                    )
+                    arrowhead2 = (
+                        arrow_end[0] - ARROW_LENGTH * 0.3 * camera.zoom * math.cos(arrowhead_angle - math.pi / 6),
+                        arrow_end[1] - ARROW_LENGTH * 0.3 * camera.zoom * math.sin(arrowhead_angle - math.pi / 6)
+                    )
+                    pygame.draw.line(arrow_surface, ARROW_COLOR, arrow_end, arrowhead1, ARROW_THICKNESS)
+                    pygame.draw.line(arrow_surface, ARROW_COLOR, arrow_end, arrowhead2, ARROW_THICKNESS)
+                    screen.blit(arrow_surface, (0, 0))
+
         if self.explosion:
             self.explosion.draw(screen, camera)
 
         if not self.is_dead:
             render_text_with_outline(self.name, font, (255, 255, 255), (self.x - CAR_WIDTH // 2, self.y - CAR_HEIGHT - NAME_OFFSET), camera)
             draw_health_bar(screen, camera, self.x, self.y, self.health, MAX_HEALTH)
+            if self.nitro < NITRO_MAX * NITRO_VISIBILITY_THRESHOLD:
+                draw_nitro_bar(screen, camera, self.x, self.y, self.nitro, NITRO_MAX)
 
         for popup in self.damage_popups:
             popup.draw(screen, camera)
         for particle in self.smoke_particles:
+            particle.draw(screen, camera)
+        for particle in self.spark_particles:
+            particle.draw(screen, camera)
+        for particle in self.nitro_flame_particles:
             particle.draw(screen, camera)
 
     def reset(self, x, y):
@@ -721,15 +874,21 @@ class Car:
         self.last_speed = 0
         self.angular_velocity = 0
         self.checkpoints_passed = 0
+        self.lap_count = 1
         self.total_reward = 0
         self.health = MAX_HEALTH
+        self.nitro = NITRO_MAX
         self.spawn_protection = True
         self.spawn_time = time.time()
         self.spawn_x = x
         self.spawn_y = y
         self.damage_popups = []
         self.smoke_particles = []
+        self.spark_particles = []
+        self.nitro_flame_particles = []
         self.last_smoke_time = 0
+        self.last_spark_time = 0
+        self.last_nitro_flame_time = 0
         self.is_dead = False
         self.death_time = 0
         self.explosion = None
@@ -774,13 +933,14 @@ def check_collision(car1, car2):
             car1.velocity_y -= impulse * ny * CAR_COLLISION_BOUNCE
             car2.velocity_x += impulse * nx * CAR_COLLISION_BOUNCE
             car2.velocity_y += impulse * ny * CAR_COLLISION_BOUNCE
-            
             damage = impulse_magnitude * DAMAGE_SCALING
             if damage > 0.1:
                 car1.damage_popups.append(DamagePopup(car1.x, car1.y, damage))
                 car2.damage_popups.append(DamagePopup(car2.x, car2.y, damage))
             car1.health = max(0, car1.health - damage)
             car2.health = max(0, car2.health - damage)
+            car1.nitro = max(0, car1.nitro - damage)
+            car2.nitro = max(0, car2.nitro - damage)
             
             car1.speed *= CAR_COLLISION_BOUNCE
             car2.speed *= CAR_COLLISION_BOUNCE
@@ -794,29 +954,24 @@ def check_collision(car1, car2):
                 car2.x -= nx * overlap / 2
                 car2.y -= ny * overlap / 2
 
-# Start screen
-player_name, player_color = show_start_screen()
+def attempt_game_start(player_name, player_color):
+    global connection_established, is_game_paused
+    start_x, start_y = find_start_position()
+    local_car = Car(start_x, start_y, 0, is_local_player=True)
+    local_car.name = player_name
+    local_car.color = player_color
+    camera = Camera()
+    camera.x = start_x
+    camera.y = start_y
+    connection_established = False
+    is_game_paused = False
+    network_thread_obj = threading.Thread(target=network_thread, args=(local_car, player_name, player_color), daemon=True)
+    network_thread_obj.start()
+    time.sleep(0.5)
+    return local_car, camera, network_thread_obj
 
-# Initialize local player
-start_x, start_y = find_start_position()
-local_car = Car(start_x, start_y, 0, is_local_player=True)
-local_car.name = player_name
-local_car.color = player_color
-
-# Initialize camera
-camera = Camera()
-camera.x = start_x
-camera.y = start_y
-
-# Start network thread
-network_thread = threading.Thread(target=network_thread, args=(local_car, player_name, player_color), daemon=True)
-network_thread.start()
-
-# Wait for server connection
-show_connection_screen()
-
-def main():
-    global screen, WINDOW_WIDTH, WINDOW_HEIGHT, is_paused
+def main(local_car, camera):
+    global screen, WINDOW_WIDTH, WINDOW_HEIGHT, is_paused, is_game_paused, connection_established
     clock = pygame.time.Clock()
     FPS = 60
     last_time = time.time()
@@ -831,11 +986,21 @@ def main():
             elif event.type == pygame.VIDEORESIZE:
                 WINDOW_WIDTH, WINDOW_HEIGHT = event.w, event.h
                 screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.RESIZABLE)
-            elif event.type == pygame.MOUSEBUTTONDOWN and local_car.is_dead:
-                start_x, start_y = find_start_position()
-                local_car.reset(start_x, start_y)
-                camera.x = start_x
-                camera.y = start_y
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if local_car.is_dead:
+                    start_x, start_y = find_start_position()
+                    local_car.reset(start_x, start_y)
+                    camera.x = start_x
+                    camera.y = start_y
+                elif is_game_paused:
+                    continue_button, exit_button = show_pause_menu()
+                    if continue_button.collidepoint(event.pos):
+                        is_game_paused = False
+                    elif exit_button.collidepoint(event.pos):
+                        return False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    is_game_paused = not is_game_paused
 
         if is_paused:
             screen.fill((0, 0, 0))
@@ -851,6 +1016,36 @@ def main():
             
             local_car.draw(camera)
             show_connection_lost_screen()
+            checkpoint_text = f"Checkpoints: {local_car.checkpoints_passed} / {total_checkpoints}"
+            lap_text = f"Lap: {local_car.lap_count}"
+            render_text_with_outline(checkpoint_text, font, (255, 255, 255), (WINDOW_WIDTH // 2, 10), camera=None)
+            render_text_with_outline(lap_text, font, (255, 255, 255), (WINDOW_WIDTH // 2, 30), camera=None)
+            pygame.display.flip()
+            clock.tick(FPS)
+            connection_attempts = 0
+            connection_established = False
+            if not show_connection_screen(1):
+                return False
+            continue
+
+        if is_game_paused:
+            screen.fill((0, 0, 0))
+            scaled_map, map_pos = camera.apply_surface_transform(map_image, (0, 0))
+            screen.blit(scaled_map, map_pos)
+            scaled_trails, trails_pos = camera.apply_surface_transform(trail_surface, (0, 0))
+            screen.blit(scaled_trails, trails_pos)
+            
+            with network_lock:
+                for pid, data in other_players.items():
+                    if pid != PLAYER_ID:
+                        data['car'].draw(camera)
+            
+            local_car.draw(camera)
+            show_pause_menu()
+            checkpoint_text = f"Checkpoints: {local_car.checkpoints_passed} / {total_checkpoints}"
+            lap_text = f"Lap: {local_car.lap_count}"
+            render_text_with_outline(checkpoint_text, font, (255, 255, 255), (WINDOW_WIDTH // 2, 10), camera=None)
+            render_text_with_outline(lap_text, font, (255, 255, 255), (WINDOW_WIDTH // 2, 30), camera=None)
             pygame.display.flip()
             clock.tick(FPS)
             continue
@@ -905,8 +1100,27 @@ def main():
         ping_pos = (WINDOW_WIDTH - ping_surface.get_width() - 10, 10)
         render_text_with_outline(ping_text, font, (255, 255, 255), ping_pos, camera=None)
 
+        checkpoint_text = f"Checkpoints: {local_car.checkpoints_passed} / {total_checkpoints}"
+        lap_text = f"Lap: {local_car.lap_count}"
+        render_text_with_outline(checkpoint_text, font, (255, 255, 255), (WINDOW_WIDTH // 2, 10), camera=None)
+        render_text_with_outline(lap_text, font, (255, 255, 255), (WINDOW_WIDTH // 2, 30), camera=None)
+
         pygame.display.flip()
         clock.tick(FPS)
 
 if __name__ == "__main__":
-    main()
+    while True:
+        player_name, player_color = show_start_screen()
+        max_attempts = 2
+        for attempt in range(1, max_attempts + 1):
+            local_car, camera, network_thread_obj = attempt_game_start(player_name, player_color)
+            if show_connection_screen(attempt):
+                if main(local_car, camera):
+                    break
+            if attempt < max_attempts:
+                other_players.clear()
+                ping_times.clear()
+                connection_attempts = 0
+                connection_established = False
+        else:
+            continue
