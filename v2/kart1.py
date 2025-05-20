@@ -16,7 +16,7 @@ pygame.init()
 # Загрузка карты
 map_image = pygame.image.load('map.png')
 MAP_WIDTH, MAP_HEIGHT = map_image.get_size()
-WINDOW_WIDTH, WINDOW_HEIGHT = 800, 600  # Initial window size
+WINDOW_WIDTH, WINDOW_HEIGHT = 800, 600
 screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.RESIZABLE)
 pygame.display.set_caption("Karting Game")
 
@@ -36,6 +36,7 @@ CAR_OTHER_COLOR = (255, 0, 0)
 WHEEL_COLOR = (100, 100, 100)
 WHEEL_ACTIVE_COLOR = (0, 255, 0)
 TRAIL_COLOR = (80, 80, 80)
+BURNT_COLOR = (50, 50, 50)
 
 # Физические параметры
 ACCELERATION = 0.3
@@ -60,20 +61,25 @@ DAMAGE_SCALING = 0.5
 SPAWN_PROTECTION_TIME = 2.0
 HEALTH_BAR_WIDTH = 40
 HEALTH_BAR_HEIGHT = 6
-HEALTH_BAR_OFFSET = 40
+HEALTH_BAR_OFFSET = 0  # Reduced from 40 to move closer
+NAME_OFFSET = 30        # New constant for name position
 SMOKE_HEALTH_THRESHOLD = 9
 SMOKE_EMISSION_RATE = 0.1
 SMOKE_LIFETIME = 1.0
 SMOKE_SPEED = 10
 POPUP_LIFETIME = 1.0
 POPUP_SPEED = 20
+EXPLOSION_LIFETIME = 0.5
+EXPLOSION_SIZE = 40
+CORPSE_LIFETIME = 3.0  # Time the burnt corpse persists
 
 # Поверхность для следов
 trail_surface = pygame.Surface((MAP_WIDTH, MAP_HEIGHT), pygame.SRCALPHA)
 
-# Шрифт
+# Шрифты
 font = pygame.font.SysFont('arial', 20)
 font_large = pygame.font.SysFont('arial', 30)
+font_small = pygame.font.SysFont('arial', 15)
 
 # Network settings
 SERVER_URL = 'http://geomit23.pythonanywhere.com/webhook'
@@ -81,24 +87,46 @@ PLAYER_ID = str(uuid.uuid4())
 other_players = {}
 network_lock = threading.Lock()
 ping_times = deque(maxlen=5)
+connection_attempts = 0
+MAX_CONNECTION_ATTEMPTS = 3
+connection_established = False
+is_paused = False
 
-# Predefined colors (avoiding near-black)
+# Predefined colors
 COLOR_OPTIONS = [
-    (255, 0, 0),    # Red
-    (0, 255, 0),    # Green
-    (0, 0, 255),    # Blue
-    (255, 255, 0),  # Yellow
-    (255, 0, 255),  # Magenta
-    (0, 255, 255),  # Cyan
-    (128, 128, 128) # Gray
+    (255, 0, 0), (0, 255, 0), (0, 0, 255),
+    (255, 255, 0), (255, 0, 255), (0, 255, 255),
+    (128, 128, 128)
 ]
+
+class Explosion:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.start_time = time.time()
+        self.lifetime = EXPLOSION_LIFETIME
+
+    def update(self, delta_time):
+        elapsed = time.time() - self.start_time
+        return elapsed < self.lifetime
+
+    def draw(self, screen, camera):
+        if not self.update(0):
+            return
+        elapsed = time.time() - self.start_time
+        alpha = max(0, 255 * (1 - elapsed / self.lifetime))
+        size = EXPLOSION_SIZE * (elapsed / self.lifetime)
+        surface = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
+        pygame.draw.circle(surface, (255, 100, 0, int(alpha)), (size, size), size)
+        screen_pos = camera.apply_transform(None, (self.x, self.y))
+        screen.blit(surface, (screen_pos[0] - size, screen_pos[1] - size))
 
 class DamagePopup:
     def __init__(self, x, y, damage):
         self.x = x
         self.y = y
         self.damage = round(damage, 1)
-        self.velocity_y = -POPUP_SPEED  # Move upward
+        self.velocity_y = -POPUP_SPEED
         self.alpha = 255
         self.lifetime = POPUP_LIFETIME
         self.start_time = time.time()
@@ -152,7 +180,7 @@ class Camera:
         self.zoom = 1.0
         self.min_zoom = 0.5
         self.max_zoom = 2.0
-        self.follow_speed = 0.1  # Controls smoothness (0 to 1, lower is smoother)
+        self.follow_speed = 0.1
 
     def update(self, target_x, target_y):
         self.target_x = target_x
@@ -217,11 +245,9 @@ def draw_health_bar(screen, camera, x, y, health, max_health):
     center_x, center_y = x - CAR_WIDTH // 2 + HEALTH_BAR_WIDTH // 2, y - CAR_HEIGHT - HEALTH_BAR_OFFSET
     screen_pos = camera.apply_transform(None, (center_x, center_y))
     
-    # Background (gray)
     bg_rect = pygame.Rect(screen_pos[0] - HEALTH_BAR_WIDTH // 2, screen_pos[1] - HEALTH_BAR_HEIGHT // 2, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT)
     pygame.draw.rect(screen, (50, 50, 50), bg_rect, border_radius=HEALTH_BAR_HEIGHT // 2)
     
-    # Health bar
     if health_ratio > 0:
         health_rect = pygame.Rect(screen_pos[0] - HEALTH_BAR_WIDTH // 2, screen_pos[1] - HEALTH_BAR_HEIGHT // 2, bar_width, HEALTH_BAR_HEIGHT)
         pygame.draw.rect(screen, color, health_rect, border_radius=HEALTH_BAR_HEIGHT // 2)
@@ -322,9 +348,54 @@ def show_start_screen():
             cursor_visible = not cursor_visible
             cursor_timer = 0
 
+def show_connection_screen():
+    global screen, WINDOW_WIDTH, WINDOW_HEIGHT, connection_established
+    dots = ""
+    start_time = time.time()
+    while not connection_established:
+        screen.fill((50, 50, 50))
+        
+        elapsed = time.time() - start_time
+        dots = "." * (int(elapsed * 2) % 4)
+        
+        text = font_large.render(f"Connecting to server{dots}", True, (255, 255, 255))
+        screen.blit(text, (WINDOW_WIDTH // 2 - text.get_width() // 2, WINDOW_HEIGHT // 2))
+        
+        pygame.display.flip()
+        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.VIDEORESIZE:
+                WINDOW_WIDTH, WINDOW_HEIGHT = event.w, event.h
+                screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.RESIZABLE)
+        
+        time.sleep(0.1)
+
+def show_connection_lost_screen():
+    global screen, WINDOW_WIDTH, WINDOW_HEIGHT
+    text = font_large.render("Connection to server...", True, (255, 255, 255))
+    screen.blit(text, (WINDOW_WIDTH // 2 - text.get_width() // 2, WINDOW_HEIGHT // 2))
+
+def show_death_screen():
+    global screen, WINDOW_WIDTH, WINDOW_HEIGHT
+    overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+    overlay.fill((100, 0, 0, 128))
+    screen.blit(overlay, (0, 0))
+    
+    death_text = font_large.render("You Died", True, (255, 255, 255))
+    respawn_text = font_small.render("Click to respawn", True, (255, 255, 255))
+    
+    screen.blit(death_text, (WINDOW_WIDTH // 2 - death_text.get_width() // 2, WINDOW_HEIGHT // 2 - 50))
+    screen.blit(respawn_text, (WINDOW_WIDTH // 2 - respawn_text.get_width() // 2, WINDOW_HEIGHT // 2 + 20))
+
 def network_thread(local_car, player_name, player_color):
-    global other_players, ping_times
+    global other_players, ping_times, connection_attempts, connection_established, is_paused
     while True:
+        if is_paused and connection_established:
+            time.sleep(0.1)
+            continue
         try:
             start_time = time.time()
             state = {
@@ -337,7 +408,9 @@ def network_thread(local_car, player_name, player_color):
                 'velocity_y': local_car.velocity_y,
                 'angular_velocity': local_car.angular_velocity,
                 'checkpoints_passed': local_car.checkpoints_passed,
-                'health': local_car.health
+                'health': local_car.health,
+                'is_dead': local_car.is_dead,
+                'death_time': local_car.death_time if local_car.is_dead else 0
             }
             payload = {
                 'player_id': PLAYER_ID,
@@ -352,6 +425,9 @@ def network_thread(local_car, player_name, player_color):
             ping_times.append(ping_ms)
             
             if response.status_code == 200:
+                connection_attempts = 0
+                connection_established = True
+                is_paused = False
                 with network_lock:
                     new_states = response.json()
                     current_time = time.time()
@@ -371,6 +447,8 @@ def network_thread(local_car, player_name, player_color):
                                 car.velocity_y = BLEND_FACTOR * car.velocity_y + (1 - BLEND_FACTOR) * state['velocity_y']
                                 car.angular_velocity = BLEND_FACTOR * car.angular_velocity + (1 - BLEND_FACTOR) * state['angular_velocity']
                                 car.health = state.get('health', MAX_HEALTH)
+                                car.is_dead = state.get('is_dead', False)
+                                car.death_time = state.get('death_time', 0)
                             else:
                                 car = Car(state['x'], state['y'], state['angle'], is_local_player=False)
                                 car.velocity_x = state['velocity_x']
@@ -379,6 +457,8 @@ def network_thread(local_car, player_name, player_color):
                                 car.steering_angle = state['steering_angle']
                                 car.angular_velocity = state['angular_velocity']
                                 car.health = state.get('health', MAX_HEALTH)
+                                car.is_dead = state.get('is_dead', False)
+                                car.death_time = state.get('death_time', 0)
                             car.checkpoints_passed = state['checkpoints_passed']
                             car.color = color
                             car.name = name
@@ -387,9 +467,15 @@ def network_thread(local_car, player_name, player_color):
                     for pid in other_players_copy:
                         if pid not in new_states and pid != PLAYER_ID:
                             del other_players[pid]
-        except requests.RequestException as e:
-            print(f"Network error: {e}")
-        time.sleep(1/30)  # Reduced update frequency
+            else:
+                connection_attempts += 1
+                if connection_attempts >= MAX_CONNECTION_ATTEMPTS:
+                    is_paused = True
+        except requests.RequestException:
+            connection_attempts += 1
+            if connection_attempts >= MAX_CONNECTION_ATTEMPTS:
+                is_paused = True
+        time.sleep(1/30)
 
 class Car:
     def __init__(self, x, y, angle, render_enabled=True, training_mode=False, is_local_player=True):
@@ -426,9 +512,22 @@ class Car:
         self.damage_popups = []
         self.smoke_particles = []
         self.last_smoke_time = 0
+        self.is_dead = False
+        self.death_time = 0
+        self.explosion = None
 
     def update(self, keys=None):
-        delta_time = 1/60  # Assuming 60 FPS
+        if self.is_dead and (time.time() - self.death_time > CORPSE_LIFETIME):
+            if self.is_local_player:
+                self.is_dead = False  # Allow local player to respawn via click
+            else:
+                return  # Non-local players will be removed by network cleanup
+        if self.is_dead:
+            if self.explosion:
+                self.explosion.update(1/60)
+            return
+
+        delta_time = 1/60
         cos_angle = math.cos(self.angle)
         sin_angle = math.sin(self.angle)
         surface_color = get_surface_color(self.x, self.y)
@@ -504,7 +603,7 @@ class Car:
             new_velocity = math.sqrt(self.velocity_x**2 + self.velocity_y**2)
             impulse = old_velocity - new_velocity
             damage = impulse * DAMAGE_SCALING
-            if damage > 0.1:  # Only show pop-up for noticeable damage
+            if damage > 0.1:
                 self.damage_popups.append(DamagePopup(self.x, self.y, damage))
             self.health = max(0, self.health - damage)
             self.speed *= WALL_BOUNCE
@@ -513,24 +612,30 @@ class Car:
             self.x = new_x
             self.y = new_y
 
-        # Check spawn protection
+        if self.health <= 0 and not self.is_dead:
+            self.is_dead = True
+            self.death_time = time.time()
+            self.explosion = Explosion(self.x, self.y)
+            self.velocity_x = 0
+            self.velocity_y = 0
+            self.speed = 0
+            self.angular_velocity = 0
+
         distance_from_spawn = math.sqrt((self.x - self.spawn_x)**2 + (self.y - self.spawn_y)**2)
         if (distance_from_spawn > MIN_SPAWN_DISTANCE or
             time.time() - self.spawn_time > SPAWN_PROTECTION_TIME):
             self.spawn_protection = False
 
-        # Emit smoke if health is low
-        if self.health <= SMOKE_HEALTH_THRESHOLD and not self.training_mode:
+        if self.health <= SMOKE_HEALTH_THRESHOLD and not self.training_mode and not self.is_dead:
             current_time = time.time()
             if current_time - self.last_smoke_time >= SMOKE_EMISSION_RATE:
                 self.smoke_particles.append(SmokeParticle(self.x, self.y))
                 self.last_smoke_time = current_time
 
-        # Update damage pop-ups and smoke particles
         self.damage_popups = [popup for popup in self.damage_popups if popup.update(delta_time)]
         self.smoke_particles = [particle for particle in self.smoke_particles if particle.update(delta_time)]
 
-        if self.render_enabled and not self.training_mode:
+        if self.render_enabled and not self.training_mode and not self.is_dead:
             self.draw_trails()
 
     def draw_trails(self):
@@ -549,6 +654,8 @@ class Car:
     def draw(self, camera):
         if not self.render_enabled or self.training_mode:
             return
+        if self.is_dead and (time.time() - self.death_time > CORPSE_LIFETIME):
+            return
         points = [
             (-CAR_WIDTH // 2, -CAR_HEIGHT // 2),
             (CAR_WIDTH // 2, -CAR_HEIGHT // 2),
@@ -558,41 +665,46 @@ class Car:
         rotated_points = []
         cos_angle = math.cos(self.angle)
         sin_angle = math.sin(self.angle)
+        color = BURNT_COLOR if self.is_dead else self.color
         for x, y in points:
             rx = x * cos_angle - y * sin_angle
             ry = x * sin_angle + y * cos_angle
             screen_pos = camera.apply_transform(None, (self.x + rx, self.y + ry))
             rotated_points.append(screen_pos)
-        pygame.draw.polygon(screen, self.color, rotated_points)
+        pygame.draw.polygon(screen, color, rotated_points)
 
-        for i, (wx, wy) in enumerate(self.wheel_positions):
-            wheel_angle = self.angle
-            wheel_h = WHEEL_HEIGHT if i < 2 else FRONT_WHEEL_HEIGHT
-            if i >= 2:
-                wheel_angle += self.steering_angle
-            wheel_points = [
-                (-WHEEL_WIDTH // 2, -wheel_h // 2),
-                (WHEEL_WIDTH // 2, -wheel_h // 2),
-                (WHEEL_WIDTH // 2, wheel_h // 2),
-                (-WHEEL_WIDTH // 2, wheel_h // 2)
-            ]
-            rotated_wheel = []
-            cos_wheel = math.cos(wheel_angle)
-            sin_wheel = math.sin(wheel_angle)
-            wheel_x = self.x + wx * cos_angle - wy * sin_angle
-            wheel_y = self.y + wx * sin_angle + wy * cos_angle
-            for x, y in wheel_points:
-                rx = x * cos_wheel - y * sin_wheel
-                ry = x * sin_wheel + y * cos_wheel
-                screen_pos = camera.apply_transform(None, (wheel_x + rx, wheel_y + ry))
-                rotated_wheel.append(screen_pos)
-            color = WHEEL_ACTIVE_COLOR if (i < 2 and (self.is_accelerating or self.is_braking)) or (i >= 2 and (self.is_turning_left or self.is_turning_right)) else WHEEL_COLOR
-            pygame.draw.polygon(screen, color, rotated_wheel)
+        if not self.is_dead:
+            for i, (wx, wy) in enumerate(self.wheel_positions):
+                wheel_angle = self.angle
+                wheel_h = WHEEL_HEIGHT if i < 2 else FRONT_WHEEL_HEIGHT
+                if i >= 2:
+                    wheel_angle += self.steering_angle
+                wheel_points = [
+                    (-WHEEL_WIDTH // 2, -wheel_h // 2),
+                    (WHEEL_WIDTH // 2, -wheel_h // 2),
+                    (WHEEL_WIDTH // 2, wheel_h // 2),
+                    (-WHEEL_WIDTH // 2, wheel_h // 2)
+                ]
+                rotated_wheel = []
+                cos_wheel = math.cos(wheel_angle)
+                sin_wheel = math.sin(wheel_angle)
+                wheel_x = self.x + wx * cos_angle - wy * sin_angle
+                wheel_y = self.y + wx * sin_angle + wy * cos_angle
+                for x, y in wheel_points:
+                    rx = x * cos_wheel - y * sin_wheel
+                    ry = x * sin_wheel + y * cos_wheel
+                    screen_pos = camera.apply_transform(None, (wheel_x + rx, wheel_y + ry))
+                    rotated_wheel.append(screen_pos)
+                color = WHEEL_ACTIVE_COLOR if (i < 2 and (self.is_accelerating or self.is_braking)) or (i >= 2 and (self.is_turning_left or self.is_turning_right)) else WHEEL_COLOR
+                pygame.draw.polygon(screen, color, rotated_wheel)
 
-        # Draw name, checkpoints, health bar, pop-ups, and smoke
-        render_text_with_outline(self.name, font, (255, 255, 255), (self.x - CAR_WIDTH // 2, self.y - CAR_HEIGHT - 80), camera)
-        render_text_with_outline(f"CP: {self.checkpoints_passed}", font, (0, 255, 0), (self.x - CAR_WIDTH // 2, self.y - CAR_HEIGHT - 60), camera)
-        draw_health_bar(screen, camera, self.x, self.y, self.health, MAX_HEALTH)
+        if self.explosion:
+            self.explosion.draw(screen, camera)
+
+        if not self.is_dead:
+            render_text_with_outline(self.name, font, (255, 255, 255), (self.x - CAR_WIDTH // 2, self.y - CAR_HEIGHT - NAME_OFFSET), camera)
+            draw_health_bar(screen, camera, self.x, self.y, self.health, MAX_HEALTH)
+
         for popup in self.damage_popups:
             popup.draw(screen, camera)
         for particle in self.smoke_particles:
@@ -618,6 +730,9 @@ class Car:
         self.damage_popups = []
         self.smoke_particles = []
         self.last_smoke_time = 0
+        self.is_dead = False
+        self.death_time = 0
+        self.explosion = None
 
 def get_surface_color(x, y):
     if 0 <= x < MAP_WIDTH and 0 <= y < MAP_HEIGHT:
@@ -632,7 +747,7 @@ def find_start_position():
     return MAP_WIDTH // 2, MAP_HEIGHT // 2
 
 def check_collision(car1, car2):
-    if car1.spawn_protection or car2.spawn_protection:
+    if car1.spawn_protection or car2.spawn_protection or car1.is_dead or car2.is_dead:
         return
 
     rect1 = pygame.Rect(car1.x - CAR_WIDTH // 2, car1.y - CAR_HEIGHT // 2, CAR_WIDTH, CAR_HEIGHT)
@@ -661,7 +776,7 @@ def check_collision(car1, car2):
             car2.velocity_y += impulse * ny * CAR_COLLISION_BOUNCE
             
             damage = impulse_magnitude * DAMAGE_SCALING
-            if damage > 0.1:  # Only show pop-up for noticeable damage
+            if damage > 0.1:
                 car1.damage_popups.append(DamagePopup(car1.x, car1.y, damage))
                 car2.damage_popups.append(DamagePopup(car2.x, car2.y, damage))
             car1.health = max(0, car1.health - damage)
@@ -697,8 +812,11 @@ camera.y = start_y
 network_thread = threading.Thread(target=network_thread, args=(local_car, player_name, player_color), daemon=True)
 network_thread.start()
 
+# Wait for server connection
+show_connection_screen()
+
 def main():
-    global screen, WINDOW_WIDTH, WINDOW_HEIGHT
+    global screen, WINDOW_WIDTH, WINDOW_HEIGHT, is_paused
     clock = pygame.time.Clock()
     FPS = 60
     last_time = time.time()
@@ -713,6 +831,29 @@ def main():
             elif event.type == pygame.VIDEORESIZE:
                 WINDOW_WIDTH, WINDOW_HEIGHT = event.w, event.h
                 screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.RESIZABLE)
+            elif event.type == pygame.MOUSEBUTTONDOWN and local_car.is_dead:
+                start_x, start_y = find_start_position()
+                local_car.reset(start_x, start_y)
+                camera.x = start_x
+                camera.y = start_y
+
+        if is_paused:
+            screen.fill((0, 0, 0))
+            scaled_map, map_pos = camera.apply_surface_transform(map_image, (0, 0))
+            screen.blit(scaled_map, map_pos)
+            scaled_trails, trails_pos = camera.apply_surface_transform(trail_surface, (0, 0))
+            screen.blit(scaled_trails, trails_pos)
+            
+            with network_lock:
+                for pid, data in other_players.items():
+                    if pid != PLAYER_ID:
+                        data['car'].draw(camera)
+            
+            local_car.draw(camera)
+            show_connection_lost_screen()
+            pygame.display.flip()
+            clock.tick(FPS)
+            continue
 
         current_time = time.time()
         delta_time = current_time - last_time
@@ -754,6 +895,9 @@ def main():
                     data['car'].draw(camera)
         
         local_car.draw(camera)
+
+        if local_car.is_dead:
+            show_death_screen()
 
         avg_ping = sum(ping_times) / len(ping_times) if ping_times else 0
         ping_text = f"Ping: {int(avg_ping)} ms"
