@@ -19,6 +19,12 @@ WINDOW_WIDTH, WINDOW_HEIGHT = 800, 600
 screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.RESIZABLE)
 pygame.display.set_caption("Karting Game")
 
+MAP_SELECTION_MARGIN = 20
+MAP_BUTTON_HEIGHT = 150
+MAP_BUTTON_WIDTH = 300
+MAP_THUMBNAIL_SIZE = (MAP_BUTTON_WIDTH - 40, MAP_BUTTON_HEIGHT - 60)
+UPLOAD_BUTTON_HEIGHT = 50
+
 # Карта
 COLOR_FLOOR = (0, 0, 0)
 COLOR_WALL = (200, 200, 200)
@@ -1263,19 +1269,277 @@ def main(local_car, camera):
         pygame.display.flip()
         clock.tick(FPS)
 
+def show_map_upload_screen():
+    global screen, WINDOW_WIDTH, WINDOW_HEIGHT
+    
+    uploaded = False
+    map_file = None
+    map_name = ""
+    input_active = False
+    cursor = '_'
+    cursor_timer = 0
+    cursor_visible = True
+    
+    # Кнопки
+    select_button = pygame.Rect(WINDOW_WIDTH // 2 - 150, WINDOW_HEIGHT // 2 - 50, 300, 50)
+    upload_button = pygame.Rect(WINDOW_WIDTH // 2 - 150, WINDOW_HEIGHT // 2 + 50, 300, 50)
+    back_button = pygame.Rect(20, WINDOW_HEIGHT - 70, 100, 50)
+    
+    # Поле для имени карты
+    name_rect = pygame.Rect(WINDOW_WIDTH // 2 - 150, WINDOW_HEIGHT // 2 - 150, 300, 40)
+    
+    while True:
+        screen.fill((50, 50, 50))
+        
+        # Заголовок
+        title = font_large.render("Upload Custom Map", True, (255, 255, 255))
+        screen.blit(title, (WINDOW_WIDTH // 2 - title.get_width() // 2, 50))
+        
+        # Поле для имени карты
+        pygame.draw.rect(screen, (255, 255, 255), name_rect, 2)
+        name_label = font.render("Map Name:", True, (255, 255, 255))
+        screen.blit(name_label, (name_rect.x, name_rect.y - 30))
+        name_surface = font.render(map_name + (cursor if input_active and cursor_visible else ''), True, (255, 255, 255))
+        screen.blit(name_surface, (name_rect.x + 10, name_rect.y + 10))
+        
+        # Кнопка выбора файла
+        mouse_pos = pygame.mouse.get_pos()
+        pygame.draw.rect(screen, BUTTON_HOVER_COLOR if select_button.collidepoint(mouse_pos) else BUTTON_COLOR, select_button)
+        select_text = font.render("Select Map File (PNG)", True, (255, 255, 255))
+        screen.blit(select_text, (
+            select_button.x + (select_button.width - select_text.get_width()) // 2,
+            select_button.y + (select_button.height - select_text.get_height()) // 2
+        ))
+        
+        # Кнопка загрузки
+        upload_enabled = map_file is not None and map_name.strip() != ""
+        upload_color = BUTTON_HOVER_COLOR if upload_button.collidepoint(mouse_pos) and upload_enabled else (
+            (100, 100, 100) if not upload_enabled else BUTTON_COLOR
+        )
+        pygame.draw.rect(screen, upload_color, upload_button)
+        upload_text = font.render("Upload Map", True, (255, 255, 255))
+        screen.blit(upload_text, (
+            upload_button.x + (upload_button.width - upload_text.get_width()) // 2,
+            upload_button.y + (upload_button.height - upload_text.get_height()) // 2
+        ))
+        
+        # Кнопка назад
+        pygame.draw.rect(screen, BUTTON_HOVER_COLOR if back_button.collidepoint(mouse_pos) else BUTTON_COLOR, back_button)
+        back_text = font.render("Back", True, (255, 255, 255))
+        screen.blit(back_text, (
+            back_button.x + (back_button.width - back_text.get_width()) // 2,
+            back_button.y + (back_button.height - back_text.get_height()) // 2
+        ))
+        
+        # Информация о выбранном файле
+        if map_file:
+            file_text = font.render(f"Selected: {map_file}", True, (200, 200, 200))
+            screen.blit(file_text, (select_button.x, select_button.y + select_button.height + 10))
+        
+        # Сообщение об успешной загрузке
+        if uploaded:
+            success_text = font.render("Map uploaded successfully!", True, (0, 255, 0))
+            screen.blit(success_text, (WINDOW_WIDTH // 2 - success_text.get_width() // 2, upload_button.y + upload_button.height + 20))
+        
+        pygame.display.flip()
+        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.VIDEORESIZE:
+                WINDOW_WIDTH, WINDOW_HEIGHT = event.w, event.h
+                screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.RESIZABLE)
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if back_button.collidepoint(event.pos):
+                    return False
+                elif select_button.collidepoint(event.pos):
+                    # Открываем диалог выбора файла
+                    try:
+                        import tkinter as tk
+                        from tkinter import filedialog
+                        root = tk.Tk()
+                        root.withdraw()
+                        file_path = filedialog.askopenfilename(
+                            title="Select Map Image",
+                            filetypes=[("PNG files", "*.png")]
+                        )
+                        if file_path:
+                            map_file = file_path
+                    except:
+                        pass
+                elif upload_button.collidepoint(event.pos) and upload_enabled:
+                    # Загружаем карту на сервер
+                    try:
+                        with open(map_file, 'rb') as f:
+                            files = {'file': f}
+                            data = {
+                                'name': map_name,
+                                'physics': json.dumps(DEFAULT_PHYSICS)
+                            }
+                            response = requests.post(
+                                f'{SERVER_URL}/maps/upload',
+                                files=files,
+                                data=data
+                            )
+                            if response.status_code == 200:
+                                uploaded = True
+                                map_file = None
+                                map_name = ""
+                    except:
+                        pass
+                elif name_rect.collidepoint(event.pos):
+                    input_active = True
+                else:
+                    input_active = False
+            elif event.type == pygame.KEYDOWN and input_active:
+                if event.key == pygame.K_BACKSPACE:
+                    map_name = map_name[:-1]
+                elif event.key == pygame.K_RETURN:
+                    input_active = False
+                elif event.unicode.isalnum() or event.unicode in [' ', '-', '_']:
+                    if len(map_name) < 20:
+                        map_name += event.unicode
+        
+        # Мигание курсора
+        cursor_timer += 1
+        if cursor_timer >= 30:
+            cursor_visible = not cursor_visible
+            cursor_timer = 0
+
+def show_map_selection_screen():
+    global screen, WINDOW_WIDTH, WINDOW_HEIGHT
+    
+    try:
+        response = requests.get(f'{SERVER_URL}/maps')
+        if response.status_code == 200:
+            available_maps = response.json()
+        else:
+            available_maps = {}
+    except requests.RequestException:
+        available_maps = {}
+    
+    map_buttons = []
+    upload_button = pygame.Rect(
+        WINDOW_WIDTH // 2 - 100,
+        WINDOW_HEIGHT - UPLOAD_BUTTON_HEIGHT - 20,
+        200,
+        UPLOAD_BUTTON_HEIGHT
+    )
+    
+    while True:
+        screen.fill((50, 50, 50))
+        
+        title = font_large.render("Select a Map", True, (255, 255, 255))
+        screen.blit(title, (WINDOW_WIDTH // 2 - title.get_width() // 2, 20))
+        
+        # Draw map buttons
+        map_buttons = []
+        for i, (map_id, map_data) in enumerate(available_maps.items()):
+            row = i // 2
+            col = i % 2
+            x = MAP_SELECTION_MARGIN + col * (MAP_BUTTON_WIDTH + MAP_SELECTION_MARGIN)
+            y = 80 + row * (MAP_BUTTON_HEIGHT + MAP_SELECTION_MARGIN)
+            rect = pygame.Rect(x, y, MAP_BUTTON_WIDTH, MAP_BUTTON_HEIGHT)
+            map_buttons.append((rect, map_id))
+            
+            # Draw button background
+            pygame.draw.rect(screen, (100, 100, 100), rect)
+            pygame.draw.rect(screen, (200, 200, 200), rect, 2)
+            
+            # Try to load thumbnail
+            try:
+                response = requests.get(f'{SERVER_URL}/maps/{map_id}')
+                if response.status_code == 200:
+                    with open('temp_map.png', 'wb') as f:
+                        f.write(response.content)
+                    thumbnail = pygame.image.load('temp_map.png')
+                    thumbnail = pygame.transform.scale(thumbnail, MAP_THUMBNAIL_SIZE)
+                    screen.blit(thumbnail, (x + 20, y + 40))
+                    os.remove('temp_map.png')
+            except:
+                pass
+            
+            # Draw map name
+            name_text = font.render(map_data['name'], True, (255, 255, 255))
+            screen.blit(name_text, (x + 10, y + 10))
+        
+        # Draw upload button
+        mouse_pos = pygame.mouse.get_pos()
+        pygame.draw.rect(screen, BUTTON_HOVER_COLOR if upload_button.collidepoint(mouse_pos) else BUTTON_COLOR, upload_button)
+        upload_text = font.render("Add Map", True, (255, 255, 255))
+        screen.blit(upload_text, (
+            upload_button.x + (upload_button.width - upload_text.get_width()) // 2,
+            upload_button.y + (upload_button.height - upload_text.get_height()) // 2
+        ))
+        
+        pygame.display.flip()
+        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.VIDEORESIZE:
+                WINDOW_WIDTH, WINDOW_HEIGHT = event.w, event.h
+                screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.RESIZABLE)
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if upload_button.collidepoint(event.pos):
+                    show_map_upload_screen()
+                    # После закрытия экрана загрузки обновляем список карт
+                    try:
+                        response = requests.get(f'{SERVER_URL}/maps')
+                        if response.status_code == 200:
+                            available_maps = response.json()
+                    except requests.RequestException:
+                        pass
+                for rect, map_id in map_buttons:
+                    if rect.collidepoint(event.pos):
+                        return map_id
+
+# Modify the main game loop
 if __name__ == "__main__":
     while True:
         player_name, player_color = show_start_screen()
-        max_attempts = 2
-        for attempt in range(1, max_attempts + 1):
-            local_car, camera, network_thread_obj = attempt_game_start(player_name, player_color)
-            if show_connection_screen(attempt):
-                if main(local_car, camera):
-                    break
-            if attempt < max_attempts:
-                other_players.clear()
-                ping_times.clear()
-                connection_attempts = 0
-                connection_established = False
+        
+        # Show map selection screen
+        selected_map = show_map_selection_screen()
+        if selected_map == "upload":
+            # Implement map upload functionality
+            pass
         else:
-            continue
+            # Load selected map and its physics
+            try:
+                response = requests.get(f'{SERVER_URL}/maps/{selected_map}')
+                if response.status_code == 200:
+                    with open('current_map.png', 'wb') as f:
+                        f.write(response.content)
+                    map_image = pygame.image.load('current_map.png')
+                    MAP_WIDTH, MAP_HEIGHT = map_image.get_size()
+                    
+                    # Get physics for this map
+                    response = requests.get(f'{SERVER_URL}/maps')
+                    if response.status_code == 200:
+                        maps_data = response.json()
+                        if selected_map in maps_data:
+                            physics = maps_data[selected_map]['physics']
+                            # Update physics constants
+                            globals().update(physics)
+            except requests.RequestException:
+                pass
+            
+            # Rest of the game initialization
+            find_checkpoints()
+            
+            max_attempts = 2
+            for attempt in range(1, max_attempts + 1):
+                local_car, camera, network_thread_obj = attempt_game_start(player_name, player_color)
+                if show_connection_screen(attempt):
+                    if main(local_car, camera):
+                        break
+                if attempt < max_attempts:
+                    other_players.clear()
+                    ping_times.clear()
+                    connection_attempts = 0
+                    connection_established = False
+            else:
+                continue
