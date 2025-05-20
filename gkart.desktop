@@ -4,5 +4,5 @@ Name=Kart
 Exec=/bin/bash ~/bin/gkart
 Type=Application
 Icon=~/kart-main/icon.png
-Terminal=false
+Terminal=true
 Comment=2D гонки

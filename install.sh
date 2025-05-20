@@ -21,3 +21,4 @@ chmod +x ~/Desktop/gkart.desktop
 
 echo -e "\033c"
 echo "Установка завершена"
+
