@@ -1,23 +1,23 @@
 import pygame
 import random
 import math
-import time
+import time as tms  # Import time with alias tms
 
 class Explosion:
     def __init__(self, x, y):
         self.x = x
         self.y = y
-        self.start_time = time.time()
+        self.start_time = tms.time()
         self.lifetime = 0.5
 
     def update(self, delta_time):
-        elapsed = time.time() - self.start_time
+        elapsed = tms.time() - self.start_time
         return elapsed < self.lifetime
 
     def draw(self, screen, camera):
         if not self.update(0):
             return
-        elapsed = time.time() - self.start_time
+        elapsed = tms.time() - self.start_time
         alpha = max(0, 255 * (1 - elapsed / self.lifetime))
         size = 40 * (elapsed / self.lifetime)
         surface = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
@@ -33,11 +33,11 @@ class DamagePopup:
         self.velocity_y = -20
         self.alpha = 255
         self.lifetime = 1.0
-        self.start_time = time.time()
+        self.start_time = tms.time()
 
     def update(self, delta_time):
         self.y += self.velocity_y * delta_time
-        elapsed = time.time() - self.start_time
+        elapsed = tms.time() - self.start_time
         self.alpha = max(0, 255 * (1 - elapsed / self.lifetime))
         return elapsed < self.lifetime
 
@@ -60,12 +60,12 @@ class SmokeParticle:
         self.size = random.uniform(5, 10)
         self.alpha = 100
         self.lifetime = 1.0
-        self.start_time = time.time()
+        self.start_time = tms.time()
 
     def update(self, delta_time):
         self.x += self.velocity_x * delta_time
         self.y += self.velocity_y * delta_time
-        elapsed = time.time() - self.start_time
+        elapsed = tms.time() - self.start_time
         self.alpha = max(0, 100 * (1 - elapsed / self.lifetime))
         return elapsed < self.lifetime
 
@@ -84,18 +84,18 @@ class SparkParticle:
         speed = random.uniform(7.5, 15)
         self.velocity_x = math.cos(angle) * speed
         self.velocity_y = math.sin(angle) * speed
-        self.length = random.uniform(4, 8)  # Length of the line segment
-        self.rotation = random.uniform(0, 2 * math.pi)  # Initial rotation angle
-        self.angular_velocity = random.uniform(-2, 2)  # Rotation speed
+        self.length = random.uniform(4, 8)
+        self.rotation = random.uniform(0, 2 * math.pi)
+        self.angular_velocity = random.uniform(-2, 2)
         self.alpha = 255
         self.lifetime = 0.3
-        self.start_time = time.time()
+        self.start_time = tms.time()
 
     def update(self, delta_time):
         self.x += self.velocity_x * delta_time
         self.y += self.velocity_y * delta_time
         self.rotation += self.angular_velocity * delta_time
-        elapsed = time.time() - self.start_time
+        elapsed = tms.time() - self.start_time
         self.alpha = max(0, 255 * (1 - elapsed / self.lifetime))
         return elapsed < self.lifetime
 
@@ -118,20 +118,19 @@ class NitroFlameParticle:
     def __init__(self, x, y, car_angle):
         self.x = x
         self.y = y
-        # Move particles backward from the car
-        angle = car_angle + math.pi + random.uniform(-0.2, 0.2)  # Slightly randomize angle
+        angle = car_angle + math.pi + random.uniform(-0.2, 0.2)
         speed = random.uniform(10, 15)
         self.velocity_x = math.cos(angle) * speed
         self.velocity_y = math.sin(angle) * speed
         self.size = random.uniform(3, 6)
         self.alpha = 200
         self.lifetime = 0.4
-        self.start_time = time.time()
+        self.start_time = tms.time()
 
     def update(self, delta_time):
         self.x += self.velocity_x * delta_time
         self.y += self.velocity_y * delta_time
-        elapsed = time.time() - self.start_time
+        elapsed = tms.time() - self.start_time
         self.alpha = max(0, 200 * (1 - elapsed / self.lifetime))
         return elapsed < self.lifetime
 
