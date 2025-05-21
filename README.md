@@ -22,6 +22,8 @@ curl -sSL https://raw.githubusercontent.com/mitrichevgeorge/kart/main/install.sh
 
 ### Цвета карты
 1. <img src="https://github.com/user-attachments/assets/9e9c591d-1f9c-4c67-9645-f59558e787e8" alt="Windscribe vpn" style="height: 1em; vertical-align: middle;" /> (0,0,0) - Пол
-2. <img src="https://github.com/user-attachments/assets/e8c7606f-ba60-48e7-900e-fe6c63467862" alt="Windscribe vpn" style="height: 1em; vertical-align: middle;" /> (0,0,0) - 
+2. <img src="https://github.com/user-attachments/assets/e8c7606f-ba60-48e7-900e-fe6c63467862" alt="Windscribe vpn" style="height: 1em; vertical-align: middle;" /> (200,200,200) - Стена
+3. <img src="https://github.com/user-attachments/assets/4e452f41-556b-4e98-84f9-e61864ee77db" alt="Windscribe vpn" style="height: 1em; vertical-align: middle;" /> (50,200,0) - Спавн
+ 
 
 
