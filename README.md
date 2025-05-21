@@ -8,3 +8,14 @@ curl -sSL https://raw.githubusercontent.com/mitrichevgeorge/kart/main/install.sh
 ```
 > [!Note]
 > Если что в терминале вставить это `CTRL + SHIFT + V`
+Далее можно запустить прописав короткую команду `gkart` или ярлыком на рабочем столе(Появится после установки)
+
+## Свойтсва игры:
+### Главный экран
+![image](https://github.com/user-attachments/assets/aa6245a8-af7f-4dcd-bd3c-b48dda1294b5)
+Мониторинг всех серверов можео посмотреть [тут](gkart.pythonanywhere.com)
+### Управление
+1. `Стрелочки` или `WASD` - движение и повороты
+2. `Shift` - Принудительный дрифт(мало ощущается)
+3. `Ctrl` - Разгон и видны синие партиклы за машинкой
+   ![image](https://github.com/user-attachments/assets/914ef07f-85af-46f5-82fd-ff04f7f543f9)
