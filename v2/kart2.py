@@ -22,6 +22,7 @@ COLOR_FLOOR = (0, 0, 0)
 COLOR_WALL = (200, 200, 200)
 COLOR_SAND = (180, 180, 0)
 COLOR_START = (50, 200, 0)
+COLOR_SPRING_WALL = (0, 200, 50)
 
 CAR_WIDTH = 25
 CAR_HEIGHT = 20
@@ -803,6 +804,30 @@ class Car:
             self.health = max(0, self.health - damage)
             self.speed *= PHYSICS_PARAMS['WALL_BOUNCE']
             self.angular_velocity *= PHYSICS_PARAMS['WALL_BOUNCE']
+        elif get_surface_color(new_x, new_y) == COLOR_SPRING_WALL:
+            old_velocity = math.sqrt(self.velocity_x**2 + self.velocity_y**2)
+            if old_velocity > 0.001:
+                normal_x = -self.velocity_x / old_velocity
+                normal_y = -self.velocity_y / old_velocity
+            else:
+                normal_x, normal_y = 0, -1
+            bounce_factor = PHYSICS_PARAMS['WALL_BOUNCE'] * 2.0
+            self.velocity_x = normal_x * old_velocity * bounce_factor
+            self.velocity_y = normal_y * old_velocity * bounce_factor
+            new_velocity = math.sqrt(self.velocity_x**2 + self.velocity_y**2)
+            impulse = old_velocity + new_velocity
+            damage = impulse * PHYSICS_PARAMS['DAMAGE_SCALING'] * 0.1
+            self.velocity_x *= PHYSICS_PARAMS['WALL_BOUNCE'] * 10
+            self.velocity_y *= PHYSICS_PARAMS['WALL_BOUNCE'] * 10
+            if damage > 0.1:
+                self.damage_popups.append(DamagePopup(self.x, self.y, damage))
+            self.health = max(0, self.health - damage)
+            self.speed = new_velocity
+            self.angular_velocity *= PHYSICS_PARAMS['WALL_BOUNCE'] * 0.5
+            current_time = tms.time()
+            if current_time - self.last_spark_time >= PHYSICS_PARAMS['SPARK_EMISSION_RATE']:
+                self.spark_particles.append(SparkParticle(self.x, self.y))
+                self.last_spark_time = current_time
         else:
             self.x = new_x
             self.y = new_y
@@ -1142,9 +1167,22 @@ def main(local_car, camera):
 
         if is_paused:
             screen.fill((0, 0, 0))
-            scaled_map, map_pos = camera.apply_surface_transform(map_image, (0, 0))
+            visible_width = int(WINDOW_WIDTH / camera.zoom)
+            visible_height = int(WINDOW_HEIGHT / camera.zoom)
+            visible_x = int(camera.x - visible_width / 2)
+            visible_y = int(camera.y - visible_height / 2)
+            visible_x = max(0, min(visible_x, MAP_WIDTH - visible_width))
+            visible_y = max(0, min(visible_y, MAP_HEIGHT - visible_height))
+            visible_width = min(visible_width, MAP_WIDTH - visible_x)
+            visible_height = min(visible_height, MAP_HEIGHT - visible_y)
+
+            map_rect = pygame.Rect(visible_x, visible_y, visible_width, visible_height)
+            cropped_map = map_image.subsurface(map_rect)
+            cropped_trails = trail_surface.subsurface(map_rect)
+            
+            scaled_map, map_pos = camera.apply_surface_transform(cropped_map, (visible_x, visible_y))
             screen.blit(scaled_map, map_pos)
-            scaled_trails, trails_pos = camera.apply_surface_transform(trail_surface, (0, 0))
+            scaled_trails, trails_pos = camera.apply_surface_transform(cropped_trails, (visible_x, visible_y))
             screen.blit(scaled_trails, trails_pos)
             
             with network_lock:
@@ -1168,9 +1206,22 @@ def main(local_car, camera):
 
         if is_game_paused:
             screen.fill((0, 0, 0))
-            scaled_map, map_pos = camera.apply_surface_transform(map_image, (0, 0))
+            visible_width = int(WINDOW_WIDTH / camera.zoom)
+            visible_height = int(WINDOW_HEIGHT / camera.zoom)
+            visible_x = int(camera.x - visible_width / 2)
+            visible_y = int(camera.y - visible_height / 2)
+            visible_x = max(0, min(visible_x, MAP_WIDTH - visible_width))
+            visible_y = max(0, min(visible_y, MAP_HEIGHT - visible_height))
+            visible_width = min(visible_width, MAP_WIDTH - visible_x)
+            visible_height = min(visible_height, MAP_HEIGHT - visible_y)
+
+            map_rect = pygame.Rect(visible_x, visible_y, visible_width, visible_height)
+            cropped_map = map_image.subsurface(map_rect)
+            cropped_trails = trail_surface.subsurface(map_rect)
+            
+            scaled_map, map_pos = camera.apply_surface_transform(cropped_map, (visible_x, visible_y))
             screen.blit(scaled_map, map_pos)
-            scaled_trails, trails_pos = camera.apply_surface_transform(trail_surface, (0, 0))
+            scaled_trails, trails_pos = camera.apply_surface_transform(cropped_trails, (visible_x, visible_y))
             screen.blit(scaled_trails, trails_pos)
             
             with network_lock:
@@ -1222,9 +1273,22 @@ def main(local_car, camera):
 
         screen.fill((0, 0, 0))
 
-        scaled_map, map_pos = camera.apply_surface_transform(map_image, (0, 0))
+        visible_width = int(WINDOW_WIDTH / camera.zoom)
+        visible_height = int(WINDOW_HEIGHT / camera.zoom)
+        visible_x = int(camera.x - visible_width / 2)
+        visible_y = int(camera.y - visible_height / 2)
+        visible_x = max(0, min(visible_x, MAP_WIDTH - visible_width))
+        visible_y = max(0, min(visible_y, MAP_HEIGHT - visible_y))
+        visible_width = min(visible_width, MAP_WIDTH - visible_x)
+        visible_height = min(visible_height, MAP_HEIGHT - visible_y)
+
+        map_rect = pygame.Rect(visible_x, visible_y, visible_width, visible_height)
+        cropped_map = map_image.subsurface(map_rect)
+        cropped_trails = trail_surface.subsurface(map_rect)
+        
+        scaled_map, map_pos = camera.apply_surface_transform(cropped_map, (visible_x, visible_y))
         screen.blit(scaled_map, map_pos)
-        scaled_trails, trails_pos = camera.apply_surface_transform(trail_surface, (0, 0))
+        scaled_trails, trails_pos = camera.apply_surface_transform(cropped_trails, (visible_x, visible_y))
         screen.blit(scaled_trails, trails_pos)
         
         with network_lock:
@@ -1262,10 +1326,10 @@ def main(local_car, camera):
 if __name__ == "__main__":
     while True:
         player_name, player_color, server_url = show_start_screen()
-        server_url = server_url + ".pythonanywhere.com"
+        server_url2 = server_url + ".pythonanywhere.com"
         max_attempts = 2
         for attempt in range(1, max_attempts + 1):
-            local_car, camera, network_thread_obj = attempt_game_start(player_name, player_color, server_url)
+            local_car, camera, network_thread_obj = attempt_game_start(player_name, player_color, server_url2)
             if local_car is None:
                 continue
             if show_connection_screen(attempt):
