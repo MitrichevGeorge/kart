@@ -1,10 +1,10 @@
 #!/bin/bash
 
-cd ~/kart-main
+cd ~/kart-main/v2
 python -m venv env
 source env/bin/activate
 pip install pygame requests
-python kart4.py
+python kart2.py
 
 deactivate
 rm -rf env

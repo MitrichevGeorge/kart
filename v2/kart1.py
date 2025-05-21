@@ -19,13 +19,11 @@ WINDOW_WIDTH, WINDOW_HEIGHT = 800, 600
 screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.RESIZABLE)
 pygame.display.set_caption("Karting Game")
 
-# Карта
 COLOR_FLOOR = (0, 0, 0)
 COLOR_WALL = (200, 200, 200)
 COLOR_SAND = (180, 180, 0)
 COLOR_START = (50, 200, 0)
 
-# Графика
 CAR_WIDTH = 25
 CAR_HEIGHT = 20
 WHEEL_WIDTH = 8
@@ -43,7 +41,6 @@ ARROW_OFFSET = CAR_WIDTH
 BUTTON_COLOR = (0, 200, 0)
 BUTTON_HOVER_COLOR = (0, 150, 0)
 
-# Физика
 ACCELERATION = 0.3
 DECELERATION = 0.04
 MAX_SPEED = 10
@@ -100,7 +97,7 @@ font_large = pygame.font.SysFont('arial', 30)
 font_small = pygame.font.SysFont('arial', 15)
 
 SERVER_URL = 'http://geomit23.pythonanywhere.com/webhook'
-PLAYER_ID = None  # Will be loaded or generated
+PLAYER_ID = None
 other_players = {}
 network_lock = threading.Lock()
 ping_times = deque(maxlen=5)

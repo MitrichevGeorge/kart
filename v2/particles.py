@@ -1,7 +1,7 @@
 import pygame
 import random
 import math
-import time as tms  # Import time with alias tms
+import time as tms
 
 class Explosion:
     def __init__(self, x, y):

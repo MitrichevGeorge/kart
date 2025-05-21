@@ -10,28 +10,19 @@ import os
 import random
 from collections import deque
 from particles import Explosion, DamagePopup, SmokeParticle, SparkParticle, NitroFlameParticle
+from io import BytesIO
 
 pygame.init()
 
-map_image = pygame.image.load('map.png')
-MAP_WIDTH, MAP_HEIGHT = map_image.get_size()
 WINDOW_WIDTH, WINDOW_HEIGHT = 800, 600
 screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.RESIZABLE)
 pygame.display.set_caption("Karting Game")
 
-MAP_SELECTION_MARGIN = 20
-MAP_BUTTON_HEIGHT = 150
-MAP_BUTTON_WIDTH = 300
-MAP_THUMBNAIL_SIZE = (MAP_BUTTON_WIDTH - 40, MAP_BUTTON_HEIGHT - 60)
-UPLOAD_BUTTON_HEIGHT = 50
-
-# Карта
 COLOR_FLOOR = (0, 0, 0)
 COLOR_WALL = (200, 200, 200)
 COLOR_SAND = (180, 180, 0)
 COLOR_START = (50, 200, 0)
 
-# Графика
 CAR_WIDTH = 25
 CAR_HEIGHT = 20
 WHEEL_WIDTH = 8
@@ -49,64 +40,19 @@ ARROW_OFFSET = CAR_WIDTH
 BUTTON_COLOR = (0, 200, 0)
 BUTTON_HOVER_COLOR = (0, 150, 0)
 
-# Физика
-ACCELERATION = 0.3
-DECELERATION = 0.04
-MAX_SPEED = 10
-TURN_ACCELERATION = 0.01
-ROTATIONAL_FRICTION = 0.04
-MAX_ANGULAR_VELOCITY = 0.40
-SAND_SLOWDOWN = 0.9
-SAND_INERTIA_LOSS = 0.08
-WALL_BOUNCE = 0.3
-FRICTION = 0.3
-TRAIL_FADE_RATE = 0.99
-MIN_SPEED_FOR_TURN = 0.5
-LOW_SPEED_TURN_FACTOR = 0.3
-HIGH_SPEED_DRIFT_FACTOR = 0.3
-DRIFT_FACTOR_ON_SHIFT = 0.8
-CAR_COLLISION_BOUNCE = 0.5
-MIN_SPAWN_DISTANCE = 30
-BLEND_FACTOR = 0.5
-MAX_HEALTH = 20
-DAMAGE_SCALING = 0.5
-SPAWN_PROTECTION_TIME = 2.0
-HEALTH_BAR_WIDTH = 40
-HEALTH_BAR_HEIGHT = 6
-HEALTH_BAR_OFFSET = 0
-NITRO_BAR_OFFSET = 8
-NAME_OFFSET = 30
-SMOKE_HEALTH_THRESHOLD = 9
-SMOKE_EMISSION_RATE = 0.1
-SMOKE_LIFETIME = 1.0
-SMOKE_SPEED = 10
-POPUP_LIFETIME = 1.0
-POPUP_SPEED = 20
-EXPLOSION_LIFETIME = 0.5
-EXPLOSION_SIZE = 40
-CORPSE_LIFETIME = 3.0
-SPARK_EMISSION_RATE = 0.1
-SPARK_LIFETIME = 0.3
-SPARK_SPEED = 15
-SPARK_ALPHA_THRESHOLD = 50
-NITRO_MAX = 100
-NITRO_REGEN_RATE = 10
-NITRO_CONSUMPTION_RATE = 50
-NITRO_BOOST_FACTOR = 3.0
-NITRO_LOW_THRESHOLD = 10
-NITRO_LOW_SLOWDOWN = 0.7
-NITRO_LOW_DAMAGE = 0.5
-NITRO_FLAME_EMISSION_RATE = 0.05
-NITRO_VISIBILITY_THRESHOLD = 0.95
+PHYSICS_PARAMS = {}
 
-trail_surface = pygame.Surface((MAP_WIDTH, MAP_HEIGHT), pygame.SRCALPHA)
+trail_surface = None
+map_image = None
+MAP_WIDTH = 0
+MAP_HEIGHT = 0
 
 font = pygame.font.SysFont('arial', 20)
 font_large = pygame.font.SysFont('arial', 30)
 font_small = pygame.font.SysFont('arial', 15)
 
-SERVER_URL = 'http://geomit23.pythonanywhere.com/webhook'
-PLAYER_ID = None  # Will be loaded or generated
+SERVER_URL = None
+PLAYER_ID = None
 other_players = {}
 network_lock = threading.Lock()
 ping_times = deque(maxlen=5)
@@ -129,6 +75,28 @@ lap_times = deque(maxlen=5)
 current_lap_start = None
 session_data = {}
 
+def load_map_and_params(server_url):
+    global map_image, MAP_WIDTH, MAP_HEIGHT, trail_surface, PHYSICS_PARAMS
+    try:
+        map_response = requests.get(f'http://{server_url}/map', timeout=5)
+        if map_response.status_code == 200:
+            map_data = BytesIO(map_response.content)
+            map_image = pygame.image.load(map_data)
+            MAP_WIDTH, MAP_HEIGHT = map_image.get_size()
+            trail_surface = pygame.Surface((MAP_WIDTH, MAP_HEIGHT), pygame.SRCALPHA)
+        else:
+            raise Exception("Failed to load map from server")
+
+        info_response = requests.get(f'http://{server_url}/info', timeout=5)
+        if info_response.status_code == 200:
+            PHYSICS_PARAMS.update(info_response.json())
+        else:
+            raise Exception("Failed to load physics parameters from server")
+    except Exception as e:
+        print(f"Error loading map or params: {e}")
+        return False
+    return True
+
 def find_checkpoints():
     global checkpoints, total_checkpoints
     checkpoints = {}
@@ -145,8 +113,6 @@ def find_checkpoints():
     for num in sorted(checkpoints.keys()):
         sorted_checkpoints[num] = checkpoints[num]
     checkpoints = sorted_checkpoints
-
-find_checkpoints()
 
 class Camera:
     def __init__(self):
@@ -190,7 +156,7 @@ def is_valid_color(color):
 def load_config():
     global PLAYER_ID
     config_file = '.kart_config.json'
-    default_config = {'name': 'Player', 'color': [128, 128, 128], 'session_id': str(uuid.uuid4()), 'position': None}
+    default_config = {'name': 'Player', 'color': [128, 128, 128], 'session_id': str(uuid.uuid4()), 'position': None, 'server_url': 'geomit25'}
     if os.path.exists(config_file):
         try:
             with open(config_file, 'r') as f:
@@ -198,7 +164,8 @@ def load_config():
                 if (isinstance(config.get('name'), str) and
                     isinstance(config.get('color'), list) and
                     len(config['color']) == 3 and
-                    is_valid_color(config['color'])):
+                    is_valid_color(config['color']) and
+                    isinstance(config.get('server_url'), str)):
                     PLAYER_ID = config.get('session_id', str(uuid.uuid4()))
                     return config
         except (json.JSONDecodeError, KeyError):
@@ -206,10 +173,10 @@ def load_config():
     PLAYER_ID = default_config['session_id']
     return default_config
 
-def save_config(name, color, position=None):
+def save_config(name, color, server_url, position=None):
     global PLAYER_ID
     config_file = '.kart_config.json'
-    config = {'name': name, 'color': color, 'session_id': PLAYER_ID, 'position': position}
+    config = {'name': name, 'color': color, 'session_id': PLAYER_ID, 'server_url': server_url, 'position': position}
     try:
         with open(config_file, 'w') as f:
             json.dump(config, f)
@@ -238,35 +205,35 @@ def save_session_data():
 
 def draw_health_bar(screen, camera, x, y, health, max_health):
     health_ratio = max(0, min(1, health / max_health))
-    bar_width = HEALTH_BAR_WIDTH * health_ratio
+    bar_width = PHYSICS_PARAMS['HEALTH_BAR_WIDTH'] * health_ratio
     green = int(255 * health_ratio)
     red = int(255 * (1 - health_ratio))
     color = (red, green, 0)
     
-    center_x, center_y = x - CAR_WIDTH // 2 + HEALTH_BAR_WIDTH // 2, y - CAR_HEIGHT - HEALTH_BAR_OFFSET
+    center_x, center_y = x - CAR_WIDTH // 2 + PHYSICS_PARAMS['HEALTH_BAR_WIDTH'] // 2, y - CAR_HEIGHT - PHYSICS_PARAMS['HEALTH_BAR_OFFSET']
     screen_pos = camera.apply_transform(None, (center_x, center_y))
     
-    bg_rect = pygame.Rect(screen_pos[0] - HEALTH_BAR_WIDTH // 2, screen_pos[1] - HEALTH_BAR_HEIGHT // 2, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT)
-    pygame.draw.rect(screen, (50, 50, 50), bg_rect, border_radius=HEALTH_BAR_HEIGHT // 2)
+    bg_rect = pygame.Rect(screen_pos[0] - PHYSICS_PARAMS['HEALTH_BAR_WIDTH'] // 2, screen_pos[1] - PHYSICS_PARAMS['HEALTH_BAR_HEIGHT'] // 2, PHYSICS_PARAMS['HEALTH_BAR_WIDTH'], PHYSICS_PARAMS['HEALTH_BAR_HEIGHT'])
+    pygame.draw.rect(screen, (50, 50, 50), bg_rect, border_radius=PHYSICS_PARAMS['HEALTH_BAR_HEIGHT'] // 2)
     
     if health_ratio > 0:
-        health_rect = pygame.Rect(screen_pos[0] - HEALTH_BAR_WIDTH // 2, screen_pos[1] - HEALTH_BAR_HEIGHT // 2, bar_width, HEALTH_BAR_HEIGHT)
-        pygame.draw.rect(screen, color, health_rect, border_radius=HEALTH_BAR_HEIGHT // 2)
+        health_rect = pygame.Rect(screen_pos[0] - PHYSICS_PARAMS['HEALTH_BAR_WIDTH'] // 2, screen_pos[1] - PHYSICS_PARAMS['HEALTH_BAR_HEIGHT'] // 2, bar_width, PHYSICS_PARAMS['HEALTH_BAR_HEIGHT'])
+        pygame.draw.rect(screen, color, health_rect, border_radius=PHYSICS_PARAMS['HEALTH_BAR_HEIGHT'] // 2)
 
 def draw_nitro_bar(screen, camera, x, y, nitro, max_nitro):
     nitro_ratio = max(0, min(1, nitro / max_nitro))
-    bar_width = HEALTH_BAR_WIDTH * nitro_ratio
+    bar_width = PHYSICS_PARAMS['HEALTH_BAR_WIDTH'] * nitro_ratio
     color = (0, 191, 255)
     
-    center_x, center_y = x - CAR_WIDTH // 2 + HEALTH_BAR_WIDTH // 2, y - CAR_HEIGHT - NITRO_BAR_OFFSET
+    center_x, center_y = x - CAR_WIDTH // 2 + PHYSICS_PARAMS['HEALTH_BAR_WIDTH'] // 2, y - CAR_HEIGHT - PHYSICS_PARAMS['NITRO_BAR_OFFSET']
     screen_pos = camera.apply_transform(None, (center_x, center_y))
     
-    bg_rect = pygame.Rect(screen_pos[0] - HEALTH_BAR_WIDTH // 2, screen_pos[1] - HEALTH_BAR_HEIGHT // 2, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT)
-    pygame.draw.rect(screen, (50, 50, 50), bg_rect, border_radius=HEALTH_BAR_HEIGHT // 2)
+    bg_rect = pygame.Rect(screen_pos[0] - PHYSICS_PARAMS['HEALTH_BAR_WIDTH'] // 2, screen_pos[1] - PHYSICS_PARAMS['HEALTH_BAR_HEIGHT'] // 2, PHYSICS_PARAMS['HEALTH_BAR_WIDTH'], PHYSICS_PARAMS['HEALTH_BAR_HEIGHT'])
+    pygame.draw.rect(screen, (50, 50, 50), bg_rect, border_radius=PHYSICS_PARAMS['HEALTH_BAR_HEIGHT'] // 2)
     
     if nitro_ratio > 0:
-        nitro_rect = pygame.Rect(screen_pos[0] - HEALTH_BAR_WIDTH // 2, screen_pos[1] - HEALTH_BAR_HEIGHT // 2, bar_width, HEALTH_BAR_HEIGHT)
-        pygame.draw.rect(screen, color, nitro_rect, border_radius=HEALTH_BAR_HEIGHT // 2)
+        nitro_rect = pygame.Rect(screen_pos[0] - PHYSICS_PARAMS['HEALTH_BAR_WIDTH'] // 2, screen_pos[1] - PHYSICS_PARAMS['HEALTH_BAR_HEIGHT'] // 2, bar_width, PHYSICS_PARAMS['HEALTH_BAR_HEIGHT'])
+        pygame.draw.rect(screen, color, nitro_rect, border_radius=PHYSICS_PARAMS['HEALTH_BAR_HEIGHT'] // 2)
 
 def render_text_with_outline(text, font, color, pos, camera=None):
     inv_color = (255 - color[0], 255 - color[1], 255 - color[2])
@@ -291,7 +258,9 @@ def show_start_screen():
     config = load_config()
     input_name = config['name']
     selected_color = config['color']
-    input_active = False
+    input_server_url = config['server_url']
+    input_active_name = False
+    input_active_url = False
     cursor = '_'
     cursor_timer = 0
     cursor_visible = True
@@ -305,7 +274,8 @@ def show_start_screen():
             pygame.Rect(WINDOW_WIDTH // 2 - len(COLOR_OPTIONS) * 40 // 2 + i * 40, WINDOW_HEIGHT // 2 + 50, 30, 30)
             for i in range(len(COLOR_OPTIONS))
         ]
-        name_rect = pygame.Rect(WINDOW_WIDTH // 2 - 100, WINDOW_HEIGHT // 2 - 50, 200, 30)
+        name_rect = pygame.Rect(WINDOW_WIDTH // 2 - 100, WINDOW_HEIGHT // 2 - 80, 200, 30)
+        url_rect = pygame.Rect(WINDOW_WIDTH // 2 - 100, WINDOW_HEIGHT // 2 - 20, 200, 30)
 
         screen.fill((50, 50, 50))
         
@@ -313,13 +283,19 @@ def show_start_screen():
         screen.blit(title, (WINDOW_WIDTH // 2 - title.get_width() // 2, 50))
 
         name_label = font.render("Name:", True, (255, 255, 255))
-        screen.blit(name_label, (WINDOW_WIDTH // 2 - 150, WINDOW_HEIGHT // 2 - 50))
-        name_surface = font.render(input_name + (cursor if input_active and cursor_visible else ''), True, (255, 255, 255))
+        screen.blit(name_label, (WINDOW_WIDTH // 2 - 150, WINDOW_HEIGHT // 2 - 80))
+        name_surface = font.render(input_name + (cursor if input_active_name and cursor_visible else ''), True, (255, 255, 255))
         pygame.draw.rect(screen, (255, 255, 255), name_rect, 2)
         screen.blit(name_surface, (name_rect.x + 5, name_rect.y + 5))
 
+        url_label = font.render("URL:", True, (255, 255, 255))
+        screen.blit(url_label, (WINDOW_WIDTH // 2 - 150, WINDOW_HEIGHT // 2 - 20))
+        url_surface = font.render(input_server_url + (cursor if input_active_url and cursor_visible else ''), True, (255, 255, 255))
+        pygame.draw.rect(screen, (255, 255, 255), url_rect, 2)
+        screen.blit(url_surface, (url_rect.x + 5, url_rect.y + 5))
+
         color_label = font.render("Car Color:", True, (255, 255, 255))
-        screen.blit(name_label, (WINDOW_WIDTH // 2 - 150, WINDOW_HEIGHT // 2))
+        screen.blit(color_label, (WINDOW_WIDTH // 2 - 150, WINDOW_HEIGHT // 2 + 20))
         for i, button in enumerate(color_buttons):
             pygame.draw.rect(screen, COLOR_OPTIONS[i], button)
             if list(selected_color) == list(COLOR_OPTIONS[i]):
@@ -343,23 +319,37 @@ def show_start_screen():
                 screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.RESIZABLE)
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if play_button.collidepoint(event.pos):
-                    save_config(input_name, selected_color)
-                    return input_name, selected_color
+                    save_config(input_name, selected_color, input_server_url)
+                    return input_name, selected_color, input_server_url
                 if name_rect.collidepoint(event.pos):
-                    input_active = True
+                    input_active_name = True
+                    input_active_url = False
+                elif url_rect.collidepoint(event.pos):
+                    input_active_url = True
+                    input_active_name = False
                 else:
-                    input_active = False
+                    input_active_name = False
+                    input_active_url = False
                 for i, button in enumerate(color_buttons):
                     if button.collidepoint(event.pos):
                         selected_color = COLOR_OPTIONS[i]
-            elif event.type == pygame.KEYDOWN and input_active:
-                if event.key == pygame.K_BACKSPACE:
-                    input_name = input_name[:-1]
-                elif event.key == pygame.K_RETURN:
-                    input_active = False
-                elif event.unicode.isalnum() or event.unicode == ' ':
-                    if len(input_name) < 20:
-                        input_name += event.unicode
+            elif event.type == pygame.KEYDOWN:
+                if input_active_name:
+                    if event.key == pygame.K_BACKSPACE:
+                        input_name = input_name[:-1]
+                    elif event.key == pygame.K_RETURN:
+                        input_active_name = False
+                    elif event.unicode.isalnum() or event.unicode in [' ', '.', ':']:
+                        if len(input_name) < 20:
+                            input_name += event.unicode
+                elif input_active_url:
+                    if event.key == pygame.K_BACKSPACE:
+                        input_server_url = input_server_url[:-1]
+                    elif event.key == pygame.K_RETURN:
+                        input_active_url = False
+                    elif event.unicode.isalnum() or event.unicode in ['.', ':']:
+                        if len(input_server_url) < 50:
+                            input_server_url += event.unicode
 
         cursor_timer += 1
         if cursor_timer >= 30:
@@ -548,7 +538,7 @@ def network_thread(local_car, player_name, player_color):
                 'name': player_name,
                 'color': player_color
             }
-            response = requests.post(SERVER_URL, json=payload, timeout=1)
+            response = requests.post(f'http://{SERVER_URL}/webhook', json=payload, timeout=1)
             end_time = tms.time()
             
             ping_ms = (end_time - start_time) * 1000
@@ -568,18 +558,18 @@ def network_thread(local_car, player_name, player_color):
                             color = data['color']
                             if pid in other_players:
                                 car = other_players[pid]['car']
-                                car.x = BLEND_FACTOR * car.x + (1 - BLEND_FACTOR) * state['x']
-                                car.y = BLEND_FACTOR * car.y + (1 - BLEND_FACTOR) * state['y']
-                                car.angle = BLEND_FACTOR * car.angle + (1 - BLEND_FACTOR) * state['angle']
-                                car.speed = BLEND_FACTOR * car.speed + (1 - BLEND_FACTOR) * state['speed']
-                                car.steering_angle = BLEND_FACTOR * car.steering_angle + (1 - BLEND_FACTOR) * state['steering_angle']
-                                car.velocity_x = BLEND_FACTOR * car.velocity_x + (1 - BLEND_FACTOR) * state['velocity_x']
-                                car.velocity_y = BLEND_FACTOR * car.velocity_y + (1 - BLEND_FACTOR) * state['velocity_y']
-                                car.angular_velocity = BLEND_FACTOR * car.angular_velocity + (1 - BLEND_FACTOR) * state['angular_velocity']
-                                car.health = state.get('health', MAX_HEALTH)
+                                car.x = PHYSICS_PARAMS['BLEND_FACTOR'] * car.x + (1 - PHYSICS_PARAMS['BLEND_FACTOR']) * state['x']
+                                car.y = PHYSICS_PARAMS['BLEND_FACTOR'] * car.y + (1 - PHYSICS_PARAMS['BLEND_FACTOR']) * state['y']
+                                car.angle = PHYSICS_PARAMS['BLEND_FACTOR'] * car.angle + (1 - PHYSICS_PARAMS['BLEND_FACTOR']) * state['angle']
+                                car.speed = PHYSICS_PARAMS['BLEND_FACTOR'] * car.speed + (1 - PHYSICS_PARAMS['BLEND_FACTOR']) * state['speed']
+                                car.steering_angle = PHYSICS_PARAMS['BLEND_FACTOR'] * car.steering_angle + (1 - PHYSICS_PARAMS['BLEND_FACTOR']) * state['steering_angle']
+                                car.velocity_x = PHYSICS_PARAMS['BLEND_FACTOR'] * car.velocity_x + (1 - PHYSICS_PARAMS['BLEND_FACTOR']) * state['velocity_x']
+                                car.velocity_y = PHYSICS_PARAMS['BLEND_FACTOR'] * car.velocity_y + (1 - PHYSICS_PARAMS['BLEND_FACTOR']) * state['velocity_y']
+                                car.angular_velocity = PHYSICS_PARAMS['BLEND_FACTOR'] * car.angular_velocity + (1 - PHYSICS_PARAMS['BLEND_FACTOR']) * state['angular_velocity']
+                                car.health = state.get('health', PHYSICS_PARAMS['MAX_HEALTH'])
                                 car.is_dead = state.get('is_dead', False)
                                 car.death_time = state.get('death_time', 0)
-                                car.nitro = state.get('nitro', NITRO_MAX)
+                                car.nitro = state.get('nitro', PHYSICS_PARAMS['NITRO_MAX'])
                                 car.lap_count = state.get('lap_count', 1)
                             else:
                                 car = Car(state['x'], state['y'], state['angle'], is_local_player=False)
@@ -588,10 +578,10 @@ def network_thread(local_car, player_name, player_color):
                                 car.speed = state['speed']
                                 car.steering_angle = state['steering_angle']
                                 car.angular_velocity = state['angular_velocity']
-                                car.health = state.get('health', MAX_HEALTH)
+                                car.health = state.get('health', PHYSICS_PARAMS['MAX_HEALTH'])
                                 car.is_dead = state.get('is_dead', False)
                                 car.death_time = state.get('death_time', 0)
-                                car.nitro = state.get('nitro', NITRO_MAX)
+                                car.nitro = state.get('nitro', PHYSICS_PARAMS['NITRO_MAX'])
                                 car.lap_count = state.get('lap_count', 1)
                             car.checkpoints_passed = state['checkpoints_passed']
                             car.color = color
@@ -643,8 +633,8 @@ class Car:
             (CAR_WIDTH // 2 - 5, CAR_HEIGHT // 2),
             (CAR_WIDTH // 2 - 5, -CAR_HEIGHT // 2)
         ]
-        self.health = MAX_HEALTH
-        self.nitro = NITRO_MAX
+        self.health = PHYSICS_PARAMS.get('MAX_HEALTH', 20)
+        self.nitro = PHYSICS_PARAMS.get('NITRO_MAX', 100)
         self.spawn_protection = True
         self.spawn_time = tms.time()
         self.spawn_x = x
@@ -705,7 +695,7 @@ class Car:
                 break
 
     def update(self, keys=None):
-        if self.is_dead and (tms.time() - self.death_time > CORPSE_LIFETIME):
+        if self.is_dead and (tms.time() - self.death_time > PHYSICS_PARAMS['CORPSE_LIFETIME']):
             if self.is_local_player:
                 self.is_dead = False
             else:
@@ -722,7 +712,7 @@ class Car:
 
         accel = 0
         turn_input = 0
-        speed_factor = abs(self.speed) / MAX_SPEED
+        speed_factor = abs(self.speed) / PHYSICS_PARAMS['MAX_SPEED']
 
         if self.is_local_player and keys:
             self.is_accelerating = keys[pygame.K_UP] or keys[pygame.K_w]
@@ -733,62 +723,62 @@ class Car:
             self.is_using_nitro = (keys[pygame.K_LCTRL] or keys[pygame.K_RCTRL]) and (self.is_accelerating or self.is_braking)
         
         if self.is_accelerating:
-            accel = ACCELERATION
+            accel = PHYSICS_PARAMS['ACCELERATION']
         if self.is_braking:
-            accel = -ACCELERATION * 0.5
+            accel = -PHYSICS_PARAMS['ACCELERATION'] * 0.5
         if self.is_using_nitro and self.nitro > 0:
-            accel *= NITRO_BOOST_FACTOR
-            self.nitro = max(0, self.nitro - NITRO_CONSUMPTION_RATE * delta_time)
+            accel *= PHYSICS_PARAMS['NITRO_BOOST_FACTOR']
+            self.nitro = max(0, self.nitro - PHYSICS_PARAMS['NITRO_CONSUMPTION_RATE'] * delta_time)
         else:
-            self.nitro = min(NITRO_MAX, self.nitro + NITRO_REGEN_RATE * delta_time)
+            self.nitro = min(PHYSICS_PARAMS['NITRO_MAX'], self.nitro + PHYSICS_PARAMS['NITRO_REGEN_RATE'] * delta_time)
 
-        if self.nitro <= NITRO_LOW_THRESHOLD:
-            self.speed *= NITRO_LOW_SLOWDOWN
+        if self.nitro <= PHYSICS_PARAMS['NITRO_LOW_THRESHOLD']:
+            self.speed *= PHYSICS_PARAMS['NITRO_LOW_SLOWDOWN']
             if not self.is_dead:
-                damage = NITRO_LOW_DAMAGE * delta_time
+                damage = PHYSICS_PARAMS['NITRO_LOW_DAMAGE'] * delta_time
                 self.health = max(0, self.health - damage)
                 if damage > 0.1:
                     self.damage_popups.append(DamagePopup(self.x, self.y, damage))
 
         if self.is_turning_left:
-            turn_input = -TURN_ACCELERATION
-            self.steering_angle = max(self.steering_angle - TURN_ACCELERATION, -math.pi / 6)
+            turn_input = -PHYSICS_PARAMS['TURN_ACCELERATION']
+            self.steering_angle = max(self.steering_angle - PHYSICS_PARAMS['TURN_ACCELERATION'], -math.pi / 6)
         elif self.is_turning_right:
-            turn_input = TURN_ACCELERATION
-            self.steering_angle = min(self.steering_angle + TURN_ACCELERATION, math.pi / 6)
+            turn_input = PHYSICS_PARAMS['TURN_ACCELERATION']
+            self.steering_angle = min(self.steering_angle + PHYSICS_PARAMS['TURN_ACCELERATION'], math.pi / 6)
         else:
             self.steering_angle *= 0.8
 
         if surface_color == COLOR_SAND:
-            accel *= SAND_SLOWDOWN
-            turn_input *= SAND_SLOWDOWN
-            self.speed *= (1 - SAND_INERTIA_LOSS)
-            self.velocity_x *= (1 - SAND_INERTIA_LOSS)
-            self.velocity_y *= (1 - SAND_INERTIA_LOSS)
-            self.angular_velocity *= (1 - SAND_INERTIA_LOSS)
+            accel *= PHYSICS_PARAMS['SAND_SLOWDOWN']
+            turn_input *= PHYSICS_PARAMS['SAND_SLOWDOWN']
+            self.speed *= (1 - PHYSICS_PARAMS['SAND_INERTIA_LOSS'])
+            self.velocity_x *= (1 - PHYSICS_PARAMS['SAND_INERTIA_LOSS'])
+            self.velocity_y *= (1 - PHYSICS_PARAMS['SAND_INERTIA_LOSS'])
+            self.angular_velocity *= (1 - PHYSICS_PARAMS['SAND_INERTIA_LOSS'])
 
         self.last_speed = self.speed
         self.speed += accel
-        self.speed = max(min(self.speed, MAX_SPEED), -MAX_SPEED / 2)
-        if abs(self.speed) < DECELERATION and not self.is_accelerating and not self.is_braking:
+        self.speed = max(min(self.speed, PHYSICS_PARAMS['MAX_SPEED']), -PHYSICS_PARAMS['MAX_SPEED'] / 2)
+        if abs(self.speed) < PHYSICS_PARAMS['DECELERATION'] and not self.is_accelerating and not self.is_braking:
             self.speed = 0
         else:
-            self.speed *= (1 - DECELERATION)
+            self.speed *= (1 - PHYSICS_PARAMS['DECELERATION'])
 
-        if abs(self.speed) > MIN_SPEED_FOR_TURN:
-            turn_scale = LOW_SPEED_TURN_FACTOR + (1 - LOW_SPEED_TURN_FACTOR) * speed_factor
+        if abs(self.speed) > PHYSICS_PARAMS['MIN_SPEED_FOR_TURN']:
+            turn_scale = PHYSICS_PARAMS['LOW_SPEED_TURN_FACTOR'] + (1 - PHYSICS_PARAMS['LOW_SPEED_TURN_FACTOR']) * speed_factor
             self.angular_velocity += turn_input * turn_scale
-            max_angular = MAX_ANGULAR_VELOCITY * turn_scale
+            max_angular = PHYSICS_PARAMS['MAX_ANGULAR_VELOCITY'] * turn_scale
             self.angular_velocity = max(min(self.angular_velocity, max_angular), -max_angular)
         else:
             self.angular_velocity *= 0.5
 
         if not self.is_turning_left and not self.is_turning_right:
-            self.angular_velocity *= (1 - ROTATIONAL_FRICTION)
+            self.angular_velocity *= (1 - PHYSICS_PARAMS['ROTATIONAL_FRICTION'])
 
         self.angle += self.angular_velocity * (1 - speed_factor * 0.5)
 
-        drift_factor = DRIFT_FACTOR_ON_SHIFT if self.is_drifting else HIGH_SPEED_DRIFT_FACTOR
+        drift_factor = PHYSICS_PARAMS['DRIFT_FACTOR_ON_SHIFT'] if self.is_drifting else PHYSICS_PARAMS['HIGH_SPEED_DRIFT_FACTOR']
         drift_scale = 1 - speed_factor * drift_factor
         if speed_factor > 0.8 and abs(self.angular_velocity) > 0.01:
             self.angle += self.angular_velocity * speed_factor * 0.2
@@ -803,16 +793,16 @@ class Car:
         new_y = self.y + self.velocity_y
         if get_surface_color(new_x, new_y) == COLOR_WALL:
             old_velocity = math.sqrt(self.velocity_x**2 + self.velocity_y**2)
-            self.velocity_x *= -WALL_BOUNCE
-            self.velocity_y *= -WALL_BOUNCE
+            self.velocity_x *= -PHYSICS_PARAMS['WALL_BOUNCE']
+            self.velocity_y *= -PHYSICS_PARAMS['WALL_BOUNCE']
             new_velocity = math.sqrt(self.velocity_x**2 + self.velocity_y**2)
             impulse = old_velocity - new_velocity
-            damage = impulse * DAMAGE_SCALING
+            damage = impulse * PHYSICS_PARAMS['DAMAGE_SCALING']
             if damage > 0.1:
                 self.damage_popups.append(DamagePopup(self.x, self.y, damage))
             self.health = max(0, self.health - damage)
-            self.speed *= WALL_BOUNCE
-            self.angular_velocity *= WALL_BOUNCE
+            self.speed *= PHYSICS_PARAMS['WALL_BOUNCE']
+            self.angular_velocity *= PHYSICS_PARAMS['WALL_BOUNCE']
         else:
             self.x = new_x
             self.y = new_y
@@ -827,19 +817,19 @@ class Car:
             self.angular_velocity = 0
 
         distance_from_spawn = math.sqrt((self.x - self.spawn_x)**2 + (self.y - self.spawn_y)**2)
-        if (distance_from_spawn > MIN_SPAWN_DISTANCE or
-            tms.time() - self.spawn_time > SPAWN_PROTECTION_TIME):
+        if (distance_from_spawn > PHYSICS_PARAMS['MIN_SPAWN_DISTANCE'] or
+            tms.time() - self.spawn_time > PHYSICS_PARAMS['SPAWN_PROTECTION_TIME']):
             self.spawn_protection = False
 
-        if self.health <= SMOKE_HEALTH_THRESHOLD and not self.training_mode and not self.is_dead:
+        if self.health <= PHYSICS_PARAMS['SMOKE_HEALTH_THRESHOLD'] and not self.training_mode and not self.is_dead:
             current_time = tms.time()
-            if current_time - self.last_smoke_time >= SMOKE_EMISSION_RATE:
+            if current_time - self.last_smoke_time >= PHYSICS_PARAMS['SMOKE_EMISSION_RATE']:
                 self.smoke_particles.append(SmokeParticle(self.x, self.y))
                 self.last_smoke_time = current_time
 
         if self.is_using_nitro and self.nitro > 0 and not self.training_mode and not self.is_dead:
             current_time = tms.time()
-            if current_time - self.last_nitro_flame_time >= NITRO_FLAME_EMISSION_RATE:
+            if current_time - self.last_nitro_flame_time >= PHYSICS_PARAMS['NITRO_FLAME_EMISSION_RATE']:
                 for i, (wx, wy) in enumerate(self.wheel_positions):
                     if i < 2:
                         wheel_x = self.x + wx * cos_angle - wy * sin_angle
@@ -859,7 +849,7 @@ class Car:
 
     def draw_trails(self):
         relative_speed = abs(self.speed) + abs(self.steering_angle * self.speed)
-        trail_alpha = min(int(relative_speed / MAX_SPEED * 255 * FRICTION * 2), 255)
+        trail_alpha = min(int(relative_speed / PHYSICS_PARAMS['MAX_SPEED'] * 255 * PHYSICS_PARAMS['FRICTION'] * 2), 255)
         cos_angle = math.cos(self.angle)
         sin_angle = math.sin(self.angle)
         surface_color = get_surface_color(self.x, self.y)
@@ -874,16 +864,16 @@ class Car:
             if adjusted_trail_alpha > 5:
                 pygame.draw.circle(trail_surface, (*TRAIL_COLOR, adjusted_trail_alpha), (int(wheel_x), int(wheel_y)), 3)
                 
-            if (self.health <= SMOKE_HEALTH_THRESHOLD and not self.training_mode and not self.is_dead and
-                surface_color == COLOR_FLOOR and adjusted_trail_alpha > SPARK_ALPHA_THRESHOLD and
-                current_time - self.last_spark_time >= SPARK_EMISSION_RATE):
+            if (self.health <= PHYSICS_PARAMS['SMOKE_HEALTH_THRESHOLD'] and not self.training_mode and not self.is_dead and
+                surface_color == COLOR_FLOOR and adjusted_trail_alpha > PHYSICS_PARAMS['SPARK_ALPHA_THRESHOLD'] and
+                current_time - self.last_spark_time >= PHYSICS_PARAMS['SPARK_EMISSION_RATE']):
                 self.spark_particles.append(SparkParticle(wheel_x, wheel_y))
                 self.last_spark_time = current_time
 
     def draw(self, camera):
         if not self.render_enabled or self.training_mode:
             return
-        if self.is_dead and (tms.time() - self.death_time > CORPSE_LIFETIME):
+        if self.is_dead and (tms.time() - self.death_time > PHYSICS_PARAMS['CORPSE_LIFETIME']):
             return
         points = [
             (-CAR_WIDTH // 2, -CAR_HEIGHT // 2),
@@ -937,7 +927,6 @@ class Car:
                 if dist > 0:
                     norm_dx = dx / dist
                     norm_dy = dy / dist
-                    # Offset the arrow start
                     arrow_start = (
                         car_screen_pos[0] + norm_dx * ARROW_OFFSET * camera.zoom,
                         car_screen_pos[1] + norm_dy * ARROW_OFFSET * camera.zoom
@@ -946,10 +935,8 @@ class Car:
                         arrow_start[0] + norm_dx * ARROW_LENGTH * camera.zoom,
                         arrow_start[1] + norm_dy * ARROW_LENGTH * camera.zoom
                     )
-                    # Create a surface for the arrow
                     arrow_surface = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
                     pygame.draw.line(arrow_surface, ARROW_COLOR, arrow_start, arrow_end, ARROW_THICKNESS)
-                    # Draw arrowhead
                     arrowhead_angle = math.atan2(dy, dx)
                     arrowhead1 = (
                         arrow_end[0] - ARROW_LENGTH * 0.3 * camera.zoom * math.cos(arrowhead_angle + math.pi / 6),
@@ -967,10 +954,10 @@ class Car:
             self.explosion.draw(screen, camera)
 
         if not self.is_dead:
-            render_text_with_outline(self.name, font, (255, 255, 255), (self.x - CAR_WIDTH // 2, self.y - CAR_HEIGHT - NAME_OFFSET), camera)
-            draw_health_bar(screen, camera, self.x, self.y, self.health, MAX_HEALTH)
-            if self.nitro < NITRO_MAX * NITRO_VISIBILITY_THRESHOLD:
-                draw_nitro_bar(screen, camera, self.x, self.y, self.nitro, NITRO_MAX)
+            render_text_with_outline(self.name, font, (255, 255, 255), (self.x - CAR_WIDTH // 2, self.y - CAR_HEIGHT - PHYSICS_PARAMS['NAME_OFFSET']), camera)
+            draw_health_bar(screen, camera, self.x, self.y, self.health, PHYSICS_PARAMS['MAX_HEALTH'])
+            if self.nitro < PHYSICS_PARAMS['NITRO_MAX'] * PHYSICS_PARAMS['NITRO_VISIBILITY_THRESHOLD']:
+                draw_nitro_bar(screen, camera, self.x, self.y, self.nitro, PHYSICS_PARAMS['NITRO_MAX'])
 
         for popup in self.damage_popups:
             popup.draw(screen, camera)
@@ -994,8 +981,8 @@ class Car:
         self.checkpoints_passed = 0
         self.lap_count = 1
         self.total_reward = 0
-        self.health = MAX_HEALTH
-        self.nitro = NITRO_MAX
+        self.health = PHYSICS_PARAMS['MAX_HEALTH']
+        self.nitro = PHYSICS_PARAMS['NITRO_MAX']
         self.spawn_protection = True
         self.spawn_time = tms.time()
         self.spawn_x = x
@@ -1012,9 +999,9 @@ class Car:
         self.explosion = None
 
 def get_surface_color(x, y):
-    if 0 <= x < MAP_WIDTH and 0 <= y < MAP_HEIGHT:
-        return map_image.get_at((int(x), int(y)))[:3]
-    return COLOR_WALL
+    if map_image is None or 0 > x or x >= MAP_WIDTH or 0 > y or y >= MAP_HEIGHT:
+        return COLOR_WALL
+    return map_image.get_at((int(x), int(y)))[:3]
 
 def find_start_position():
     config = load_config()
@@ -1050,11 +1037,11 @@ def check_collision(car1, car2):
             impulse = (2 * dot) / 2
             impulse_magnitude = abs(impulse)
             
-            car1.velocity_x -= impulse * nx * CAR_COLLISION_BOUNCE
-            car1.velocity_y -= impulse * ny * CAR_COLLISION_BOUNCE
-            car2.velocity_x += impulse * nx * CAR_COLLISION_BOUNCE
-            car2.velocity_y += impulse * ny * CAR_COLLISION_BOUNCE
-            damage = impulse_magnitude * DAMAGE_SCALING
+            car1.velocity_x -= impulse * nx * PHYSICS_PARAMS['CAR_COLLISION_BOUNCE']
+            car1.velocity_y -= impulse * ny * PHYSICS_PARAMS['CAR_COLLISION_BOUNCE']
+            car2.velocity_x += impulse * nx * PHYSICS_PARAMS['CAR_COLLISION_BOUNCE']
+            car2.velocity_y += impulse * ny * PHYSICS_PARAMS['CAR_COLLISION_BOUNCE']
+            damage = impulse_magnitude * PHYSICS_PARAMS['DAMAGE_SCALING']
             if damage > 0.1:
                 car1.damage_popups.append(DamagePopup(car1.x, car1.y, damage))
                 car2.damage_popups.append(DamagePopup(car2.x, car2.y, damage))
@@ -1063,10 +1050,10 @@ def check_collision(car1, car2):
             car1.nitro = max(0, car1.nitro - damage)
             car2.nitro = max(0, car2.nitro - damage)
             
-            car1.speed *= CAR_COLLISION_BOUNCE
-            car2.speed *= CAR_COLLISION_BOUNCE
-            car1.angular_velocity *= CAR_COLLISION_BOUNCE
-            car2.angular_velocity *= CAR_COLLISION_BOUNCE
+            car1.speed *= PHYSICS_PARAMS['CAR_COLLISION_BOUNCE']
+            car2.speed *= PHYSICS_PARAMS['CAR_COLLISION_BOUNCE']
+            car1.angular_velocity *= PHYSICS_PARAMS['CAR_COLLISION_BOUNCE']
+            car2.angular_velocity *= PHYSICS_PARAMS['CAR_COLLISION_BOUNCE']
             
             overlap = (CAR_WIDTH + CAR_HEIGHT) / 2 - distance
             if overlap > 0:
@@ -1075,10 +1062,14 @@ def check_collision(car1, car2):
                 car2.x -= nx * overlap / 2
                 car2.y -= ny * overlap / 2
 
-def attempt_game_start(player_name, player_color):
-    global connection_established, is_game_paused, session_data
+def attempt_game_start(player_name, player_color, server_url):
+    global connection_established, is_game_paused, session_data, SERVER_URL, map_image
+    SERVER_URL = server_url
     load_session_data()
     session_data['name'] = player_name
+    if not load_map_and_params(server_url):
+        return None, None, None
+    find_checkpoints()
     start_x, start_y = find_start_position()
     local_car = Car(start_x, start_y, 0, is_local_player=True)
     local_car.name = player_name
@@ -1097,14 +1088,14 @@ def main(local_car, camera):
     global screen, WINDOW_WIDTH, WINDOW_HEIGHT, is_paused, is_game_paused, connection_established, current_lap_start
     clock = pygame.time.Clock()
     FPS = 60
-    last_time = tms.time()  # Use tms.time()
+    last_time = tms.time()
     show_laps_leaderboard_flag = False
     show_times_leaderboard_flag = False
     
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                save_config(local_car.name, local_car.color, [local_car.x, local_car.y])
+                save_config(local_car.name, local_car.color, SERVER_URL, [local_car.x, local_car.y])
                 save_session_data()
                 pygame.quit()
                 sys.exit()
@@ -1132,7 +1123,7 @@ def main(local_car, camera):
                         show_times_leaderboard_flag = True
                         show_laps_leaderboard_flag = False
                     elif exit_button.collidepoint(event.pos):
-                        save_config(local_car.name, local_car.color, [local_car.x, local_car.y])
+                        save_config(local_car.name, local_car.color, SERVER_URL, [local_car.x, local_car.y])
                         save_session_data()
                         return False
                     elif show_laps_leaderboard_flag:
@@ -1225,7 +1216,7 @@ def main(local_car, camera):
 
         faded_surface = pygame.Surface((MAP_WIDTH, MAP_HEIGHT), pygame.SRCALPHA)
         faded_surface.blit(trail_surface, (0, 0))
-        faded_surface.set_alpha(int(255 * TRAIL_FADE_RATE))
+        faded_surface.set_alpha(int(255 * PHYSICS_PARAMS['TRAIL_FADE_RATE']))
         trail_surface.fill((0, 0, 0, 0))
         trail_surface.blit(faded_surface, (0, 0))
 
@@ -1246,7 +1237,6 @@ def main(local_car, camera):
         if local_car.is_dead:
             show_death_screen()
 
-        # Draw current lap time and last 5 lap times
         if current_lap_start is not None:
             lap_time = tms.time() - current_lap_start
             lap_time_text = f"Current Lap: {lap_time:.1f}s"
@@ -1269,277 +1259,22 @@ def main(local_car, camera):
         pygame.display.flip()
         clock.tick(FPS)
 
-def show_map_upload_screen():
-    global screen, WINDOW_WIDTH, WINDOW_HEIGHT
-    
-    uploaded = False
-    map_file = None
-    map_name = ""
-    input_active = False
-    cursor = '_'
-    cursor_timer = 0
-    cursor_visible = True
-    
-    # Кнопки
-    select_button = pygame.Rect(WINDOW_WIDTH // 2 - 150, WINDOW_HEIGHT // 2 - 50, 300, 50)
-    upload_button = pygame.Rect(WINDOW_WIDTH // 2 - 150, WINDOW_HEIGHT // 2 + 50, 300, 50)
-    back_button = pygame.Rect(20, WINDOW_HEIGHT - 70, 100, 50)
-    
-    # Поле для имени карты
-    name_rect = pygame.Rect(WINDOW_WIDTH // 2 - 150, WINDOW_HEIGHT // 2 - 150, 300, 40)
-    
-    while True:
-        screen.fill((50, 50, 50))
-        
-        # Заголовок
-        title = font_large.render("Upload Custom Map", True, (255, 255, 255))
-        screen.blit(title, (WINDOW_WIDTH // 2 - title.get_width() // 2, 50))
-        
-        # Поле для имени карты
-        pygame.draw.rect(screen, (255, 255, 255), name_rect, 2)
-        name_label = font.render("Map Name:", True, (255, 255, 255))
-        screen.blit(name_label, (name_rect.x, name_rect.y - 30))
-        name_surface = font.render(map_name + (cursor if input_active and cursor_visible else ''), True, (255, 255, 255))
-        screen.blit(name_surface, (name_rect.x + 10, name_rect.y + 10))
-        
-        # Кнопка выбора файла
-        mouse_pos = pygame.mouse.get_pos()
-        pygame.draw.rect(screen, BUTTON_HOVER_COLOR if select_button.collidepoint(mouse_pos) else BUTTON_COLOR, select_button)
-        select_text = font.render("Select Map File (PNG)", True, (255, 255, 255))
-        screen.blit(select_text, (
-            select_button.x + (select_button.width - select_text.get_width()) // 2,
-            select_button.y + (select_button.height - select_text.get_height()) // 2
-        ))
-        
-        # Кнопка загрузки
-        upload_enabled = map_file is not None and map_name.strip() != ""
-        upload_color = BUTTON_HOVER_COLOR if upload_button.collidepoint(mouse_pos) and upload_enabled else (
-            (100, 100, 100) if not upload_enabled else BUTTON_COLOR
-        )
-        pygame.draw.rect(screen, upload_color, upload_button)
-        upload_text = font.render("Upload Map", True, (255, 255, 255))
-        screen.blit(upload_text, (
-            upload_button.x + (upload_button.width - upload_text.get_width()) // 2,
-            upload_button.y + (upload_button.height - upload_text.get_height()) // 2
-        ))
-        
-        # Кнопка назад
-        pygame.draw.rect(screen, BUTTON_HOVER_COLOR if back_button.collidepoint(mouse_pos) else BUTTON_COLOR, back_button)
-        back_text = font.render("Back", True, (255, 255, 255))
-        screen.blit(back_text, (
-            back_button.x + (back_button.width - back_text.get_width()) // 2,
-            back_button.y + (back_button.height - back_text.get_height()) // 2
-        ))
-        
-        # Информация о выбранном файле
-        if map_file:
-            file_text = font.render(f"Selected: {map_file}", True, (200, 200, 200))
-            screen.blit(file_text, (select_button.x, select_button.y + select_button.height + 10))
-        
-        # Сообщение об успешной загрузке
-        if uploaded:
-            success_text = font.render("Map uploaded successfully!", True, (0, 255, 0))
-            screen.blit(success_text, (WINDOW_WIDTH // 2 - success_text.get_width() // 2, upload_button.y + upload_button.height + 20))
-        
-        pygame.display.flip()
-        
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            elif event.type == pygame.VIDEORESIZE:
-                WINDOW_WIDTH, WINDOW_HEIGHT = event.w, event.h
-                screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.RESIZABLE)
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                if back_button.collidepoint(event.pos):
-                    return False
-                elif select_button.collidepoint(event.pos):
-                    # Открываем диалог выбора файла
-                    try:
-                        import tkinter as tk
-                        from tkinter import filedialog
-                        root = tk.Tk()
-                        root.withdraw()
-                        file_path = filedialog.askopenfilename(
-                            title="Select Map Image",
-                            filetypes=[("PNG files", "*.png")]
-                        )
-                        if file_path:
-                            map_file = file_path
-                    except:
-                        pass
-                elif upload_button.collidepoint(event.pos) and upload_enabled:
-                    # Загружаем карту на сервер
-                    try:
-                        with open(map_file, 'rb') as f:
-                            files = {'file': f}
-                            data = {
-                                'name': map_name,
-                                'physics': json.dumps(DEFAULT_PHYSICS)
-                            }
-                            response = requests.post(
-                                f'{SERVER_URL}/maps/upload',
-                                files=files,
-                                data=data
-                            )
-                            if response.status_code == 200:
-                                uploaded = True
-                                map_file = None
-                                map_name = ""
-                    except:
-                        pass
-                elif name_rect.collidepoint(event.pos):
-                    input_active = True
-                else:
-                    input_active = False
-            elif event.type == pygame.KEYDOWN and input_active:
-                if event.key == pygame.K_BACKSPACE:
-                    map_name = map_name[:-1]
-                elif event.key == pygame.K_RETURN:
-                    input_active = False
-                elif event.unicode.isalnum() or event.unicode in [' ', '-', '_']:
-                    if len(map_name) < 20:
-                        map_name += event.unicode
-        
-        # Мигание курсора
-        cursor_timer += 1
-        if cursor_timer >= 30:
-            cursor_visible = not cursor_visible
-            cursor_timer = 0
-
-def show_map_selection_screen():
-    global screen, WINDOW_WIDTH, WINDOW_HEIGHT
-    
-    try:
-        response = requests.get(f'{SERVER_URL}/maps')
-        if response.status_code == 200:
-            available_maps = response.json()
-        else:
-            available_maps = {}
-    except requests.RequestException:
-        available_maps = {}
-    
-    map_buttons = []
-    upload_button = pygame.Rect(
-        WINDOW_WIDTH // 2 - 100,
-        WINDOW_HEIGHT - UPLOAD_BUTTON_HEIGHT - 20,
-        200,
-        UPLOAD_BUTTON_HEIGHT
-    )
-    
-    while True:
-        screen.fill((50, 50, 50))
-        
-        title = font_large.render("Select a Map", True, (255, 255, 255))
-        screen.blit(title, (WINDOW_WIDTH // 2 - title.get_width() // 2, 20))
-        
-        # Draw map buttons
-        map_buttons = []
-        for i, (map_id, map_data) in enumerate(available_maps.items()):
-            row = i // 2
-            col = i % 2
-            x = MAP_SELECTION_MARGIN + col * (MAP_BUTTON_WIDTH + MAP_SELECTION_MARGIN)
-            y = 80 + row * (MAP_BUTTON_HEIGHT + MAP_SELECTION_MARGIN)
-            rect = pygame.Rect(x, y, MAP_BUTTON_WIDTH, MAP_BUTTON_HEIGHT)
-            map_buttons.append((rect, map_id))
-            
-            # Draw button background
-            pygame.draw.rect(screen, (100, 100, 100), rect)
-            pygame.draw.rect(screen, (200, 200, 200), rect, 2)
-            
-            # Try to load thumbnail
-            try:
-                response = requests.get(f'{SERVER_URL}/maps/{map_id}')
-                if response.status_code == 200:
-                    with open('temp_map.png', 'wb') as f:
-                        f.write(response.content)
-                    thumbnail = pygame.image.load('temp_map.png')
-                    thumbnail = pygame.transform.scale(thumbnail, MAP_THUMBNAIL_SIZE)
-                    screen.blit(thumbnail, (x + 20, y + 40))
-                    os.remove('temp_map.png')
-            except:
-                pass
-            
-            # Draw map name
-            name_text = font.render(map_data['name'], True, (255, 255, 255))
-            screen.blit(name_text, (x + 10, y + 10))
-        
-        # Draw upload button
-        mouse_pos = pygame.mouse.get_pos()
-        pygame.draw.rect(screen, BUTTON_HOVER_COLOR if upload_button.collidepoint(mouse_pos) else BUTTON_COLOR, upload_button)
-        upload_text = font.render("Add Map", True, (255, 255, 255))
-        screen.blit(upload_text, (
-            upload_button.x + (upload_button.width - upload_text.get_width()) // 2,
-            upload_button.y + (upload_button.height - upload_text.get_height()) // 2
-        ))
-        
-        pygame.display.flip()
-        
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            elif event.type == pygame.VIDEORESIZE:
-                WINDOW_WIDTH, WINDOW_HEIGHT = event.w, event.h
-                screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.RESIZABLE)
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                if upload_button.collidepoint(event.pos):
-                    show_map_upload_screen()
-                    # После закрытия экрана загрузки обновляем список карт
-                    try:
-                        response = requests.get(f'{SERVER_URL}/maps')
-                        if response.status_code == 200:
-                            available_maps = response.json()
-                    except requests.RequestException:
-                        pass
-                for rect, map_id in map_buttons:
-                    if rect.collidepoint(event.pos):
-                        return map_id
-
-# Modify the main game loop
 if __name__ == "__main__":
     while True:
-        player_name, player_color = show_start_screen()
-        
-        # Show map selection screen
-        selected_map = show_map_selection_screen()
-        if selected_map == "upload":
-            # Implement map upload functionality
-            pass
-        else:
-            # Load selected map and its physics
-            try:
-                response = requests.get(f'{SERVER_URL}/maps/{selected_map}')
-                if response.status_code == 200:
-                    with open('current_map.png', 'wb') as f:
-                        f.write(response.content)
-                    map_image = pygame.image.load('current_map.png')
-                    MAP_WIDTH, MAP_HEIGHT = map_image.get_size()
-                    
-                    # Get physics for this map
-                    response = requests.get(f'{SERVER_URL}/maps')
-                    if response.status_code == 200:
-                        maps_data = response.json()
-                        if selected_map in maps_data:
-                            physics = maps_data[selected_map]['physics']
-                            # Update physics constants
-                            globals().update(physics)
-            except requests.RequestException:
-                pass
-            
-            # Rest of the game initialization
-            find_checkpoints()
-            
-            max_attempts = 2
-            for attempt in range(1, max_attempts + 1):
-                local_car, camera, network_thread_obj = attempt_game_start(player_name, player_color)
-                if show_connection_screen(attempt):
-                    if main(local_car, camera):
-                        break
-                if attempt < max_attempts:
-                    other_players.clear()
-                    ping_times.clear()
-                    connection_attempts = 0
-                    connection_established = False
-            else:
+        player_name, player_color, server_url = show_start_screen()
+        server_url = server_url + ".pythonanywhere.com"
+        max_attempts = 2
+        for attempt in range(1, max_attempts + 1):
+            local_car, camera, network_thread_obj = attempt_game_start(player_name, player_color, server_url)
+            if local_car is None:
                 continue
+            if show_connection_screen(attempt):
+                if main(local_car, camera):
+                    break
+            if attempt < max_attempts:
+                other_players.clear()
+                ping_times.clear()
+                connection_attempts = 0
+                connection_established = False
+        else:
+            continue
