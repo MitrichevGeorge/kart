@@ -622,7 +622,7 @@ class Car:
         self.is_drifting = False
         self.is_using_nitro = False
         self.checkpoints_passed = 0
-        self.lap_count = 1  # Start at lap 1
+        self.lap_count = 1
         self.render_enabled = render_enabled
         self.training_mode = training_mode
         self.is_local_player = is_local_player
@@ -1120,8 +1120,8 @@ def main(local_car, camera):
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                save_config(local_car.name, local_car.color, SERVER_URL, [local_car.x, local_car.y])
-                save_session_data()
+                # save_config(local_car.name, local_car.color, SERVER_URL, [local_car.x, local_car.y])
+                # save_session_data()
                 pygame.quit()
                 sys.exit()
             elif event.type == pygame.MOUSEWHEEL:
