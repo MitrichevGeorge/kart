@@ -78,7 +78,7 @@ curl -sSL https://raw.githubusercontent.com/mitrichevgeorge/kart/main/install.sh
    ![image](https://github.com/user-attachments/assets/38602484-b65b-4dff-a7db-d7922b7131bb)
 
 3. создайте карту
-   Просто в `paint`. Например так:
+   Просто в `paint`. Про цвета было расписано [здесь](#цвета-карты) Например так:
    ![image](https://github.com/user-attachments/assets/ad621a33-20c9-432a-a02f-6454b62ae1ce)
    затем сохраните её в `.png` файл
 
@@ -150,11 +150,22 @@ curl -sSL https://raw.githubusercontent.com/mitrichevgeorge/kart/main/install.sh
    ![image](https://github.com/user-attachments/assets/9c1e3c2c-20ae-43a2-95bd-99aa894d2fa6)
    Вернитесь в папку `info` и загрузите карту
    ![image](https://github.com/user-attachments/assets/ab46019e-45b6-48f3-a02f-418ec39b1ee1)
-   ![Uploading image.png…]()
+   ![image](https://github.com/user-attachments/assets/04222ffe-f75e-4405-9d48-9e218b865425)
+   Затем выберите на своём компе карту ранее созданную. Она должна называться `map.png`. Должно быть так:
+   ![image](https://github.com/user-attachments/assets/0af3dd84-2166-4e01-8ca1-a9c46bf8a4b3)
+6. Перейдите в раздел `web` и создайте новое приложение
+   ![image](https://github.com/user-attachments/assets/4f272201-643f-493c-8746-838fc3d63d5a)
+   ![image](https://github.com/user-attachments/assets/fd01724d-fb0a-4a86-8ef3-22a7377a0b2c)
+   ![image](https://github.com/user-attachments/assets/a8c5e3a1-4e24-4aa9-bdb2-8a6e3c5ec375)
+   ![image](https://github.com/user-attachments/assets/8dc4b05b-b2d6-4ede-8cac-115370aacedc)
+   ![image](https://github.com/user-attachments/assets/c5ccd345-1d50-441c-9479-0aba89ee5318)
+   ![image](https://github.com/user-attachments/assets/a6486494-d419-4aec-9111-ab82fd52a405)
 
-
-
-7. Впишите код:
+7. Напишите код сервера
+   ![image](https://github.com/user-attachments/assets/cb8b09fe-fb9f-4dd3-a2e6-d41314b5bba5)
+   ![image](https://github.com/user-attachments/assets/7bb9ae34-9b35-4aa6-bfdb-ed5710d1e53c)
+   ![image](https://github.com/user-attachments/assets/37c84b4e-7701-4cf7-b2a6-944419fb27de)
+   Выделите всё(`ctrl+A`) и впишите код:
    <details>
       <summary>тут код сервера (нажмите чтобы развернуть)</summary>
 
@@ -256,9 +267,39 @@ curl -sSL https://raw.githubusercontent.com/mitrichevgeorge/kart/main/install.sh
           app.run(debug=False)
       ```
       Тут вам надо в первой строчке заменить `YOURNAME` на ваш юзернейм, который вы указали при регистрации
-</details>
+   </details>
+   И сохраняем файл
+   
+   ![image](https://github.com/user-attachments/assets/d1938b18-86f5-4e8a-87d4-f7d882f346f9)
 
+8. Переходим на главную страницу
+   
+   ![image](https://github.com/user-attachments/assets/b6eb0e02-cb60-4239-85fe-60d2956971c7)
+   
+   Открываем консоль хостинга
+   
+   ![image](https://github.com/user-attachments/assets/8bfa64b6-9e63-477c-b9fb-fb1aeeb8ff24)
+   
+   Устанавливаем `flask_cors`
+   
+   ![image](https://github.com/user-attachments/assets/37c862cf-e91c-43f1-b8ba-07f9bc9db036)
+   
+   Возвращаемся на главную
 
+   ![image](https://github.com/user-attachments/assets/77e85efb-b4dd-4dd1-924a-f51c45504256)
+
+   Перезагружаем ранее созданное веб-приложение
  
+   ![image](https://github.com/user-attachments/assets/d4b32a2d-3f02-4acf-ac8c-7a23628b3bfc)
+   ![image](https://github.com/user-attachments/assets/3b48888c-41b1-4a9a-bb7a-1975993ba277)
 
+9. Проверить
+   ![image](https://github.com/user-attachments/assets/d90295b8-43b2-426b-97ed-b57b080ab10e)
+   ![image](https://github.com/user-attachments/assets/cbca803b-3675-4d9f-aca8-9ca9e044ebff)
 
+10. Желательно добавить на [страницу мониторинга серверов](https://gkart.pythonanywhere.com/)
+    ![image](https://github.com/user-attachments/assets/6f11f400-a2a0-439e-86fb-d8cf4322bb97)
+    Сдесь можно удобно просматривать онлайн и пинг доступных серверов
+    ![image](https://github.com/user-attachments/assets/8f435078-5a59-4de3-874e-66e39c2dfa18)
+
+   
