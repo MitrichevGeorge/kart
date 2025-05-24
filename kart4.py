@@ -9,23 +9,19 @@ import uuid
 import os
 from collections import deque
 
-# Инициализация Pygame
 pygame.init()
 
-# Загрузка карты
 map_image = pygame.image.load('map.png')
 MAP_WIDTH, MAP_HEIGHT = map_image.get_size()
-WINDOW_WIDTH, WINDOW_HEIGHT = 800, 600  # Initial window size
+WINDOW_WIDTH, WINDOW_HEIGHT = 800, 600
 screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.RESIZABLE)
 pygame.display.set_caption("Karting Game")
 
-# Цвета карты
 COLOR_FLOOR = (0, 0, 0)
 COLOR_WALL = (200, 200, 200)
 COLOR_SAND = (180, 180, 0)
 COLOR_START = (50, 200, 0)
 
-# Параметры машинки
 CAR_WIDTH = 25
 CAR_HEIGHT = 20
 WHEEL_WIDTH = 8
@@ -36,7 +32,6 @@ WHEEL_COLOR = (100, 100, 100)
 WHEEL_ACTIVE_COLOR = (0, 255, 0)
 TRAIL_COLOR = (80, 80, 80)
 
-# Физические параметры
 ACCELERATION = 0.3
 DECELERATION = 0.04
 MAX_SPEED = 10
@@ -55,29 +50,25 @@ CAR_COLLISION_BOUNCE = 0.5
 MIN_SPAWN_DISTANCE = 30
 BLEND_FACTOR = 0.5
 
-# Поверхность для следов
 trail_surface = pygame.Surface((MAP_WIDTH, MAP_HEIGHT), pygame.SRCALPHA)
 
-# Шрифт
 font = pygame.font.SysFont('arial', 20)
 font_large = pygame.font.SysFont('arial', 30)
 
-# Network settings
 SERVER_URL = 'http://geomit22.pythonanywhere.com/webhook'
 PLAYER_ID = str(uuid.uuid4())
 other_players = {}
 network_lock = threading.Lock()
 ping_times = deque(maxlen=5)
 
-# Predefined colors (avoiding near-black)
 COLOR_OPTIONS = [
-    (255, 0, 0),    # Red
-    (0, 255, 0),    # Green
-    (0, 0, 255),    # Blue
-    (255, 255, 0),  # Yellow
-    (255, 0, 255),  # Magenta
-    (0, 255, 255),  # Cyan
-    (128, 128, 128) # Gray
+    (255, 0, 0),
+    (0, 255, 0),
+    (0, 0, 255),
+    (255, 255, 0),
+    (255, 0, 255),
+    (0, 255, 255),
+    (128, 128, 128)
 ]
 
 class Camera:
@@ -89,12 +80,11 @@ class Camera:
         self.zoom = 1.0
         self.min_zoom = 0.5
         self.max_zoom = 2.0
-        self.follow_speed = 0.1  # Controls smoothness (0 to 1, lower is smoother)
+        self.follow_speed = 0.1
 
     def update(self, target_x, target_y):
         self.target_x = target_x
         self.target_y = target_y
-        # Smoothly interpolate towards the target position
         self.x = self.x + (self.target_x - self.x) * self.follow_speed
         self.y = self.y + (self.target_y - self.y) * self.follow_speed
 
@@ -103,13 +93,18 @@ class Camera:
         self.zoom = max(self.min_zoom, min(self.max_zoom, new_zoom))
 
     def apply_transform(self, surface, pos):
-        # Translate position relative to camera and apply zoom
         screen_x = (pos[0] - self.x) * self.zoom + WINDOW_WIDTH / 2
         screen_y = (pos[1] - self.y) * self.zoom + WINDOW_HEIGHT / 2
         return screen_x, screen_y
 
     def apply_surface_transform(self, surface, pos):
-        # Scale and position the surface
+        scaled_surface = pygame.transform.scale(
+            surface,
+            (int(surface.get_width() * self.zoom), int(surface.get_height() * self.zoom))
+        )
+        screen_x = (pos[0] - self.x) * self.zoom + WINDOW_WIDTH / 2
+        screen_y = (pos[1] - self.y) * self.zoom + WINDOW_HEIGHT / 2
+        return scaled_surface, (screen_x, screen_y)
         scaled_surface = pygame.transform.scale(
             surface,
             (int(surface.get_width() * self.zoom), int(surface.get_height() * self.zoom))
