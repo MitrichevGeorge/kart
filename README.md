@@ -10,6 +10,9 @@ curl -sSL https://raw.githubusercontent.com/mitrichevgeorge/kart/main/install.sh
 > Если что в терминале вставить это `CTRL + SHIFT + V`
 Далее можно запустить прописав короткую команду `gkart` или ярлыком на рабочем столе(Появится после установки)
 
+## Для Windows
+Для винды есть просто [готовая сборка](https://github.com/MitrichevGeorge/kart/blob/main/v2/dist/kart2.exe)
+
 ## Свойтсва игры:
 ### Главный экран
 ![image](https://github.com/user-attachments/assets/aa6245a8-af7f-4dcd-bd3c-b48dda1294b5)
