@@ -77,9 +77,20 @@ curl -sSL https://raw.githubusercontent.com/mitrichevgeorge/kart/main/install.sh
    ![image](https://github.com/user-attachments/assets/a3eac0d7-55d7-409b-9692-2eee3bdd2d08)
    ![image](https://github.com/user-attachments/assets/38602484-b65b-4dff-a7db-d7922b7131bb)
 
+3. создайте карту
+4. загрузите файлы
+   ![image](https://github.com/user-attachments/assets/c43d3bb1-40d0-49a5-88da-a90d03f9e0dc)
+   создайте папку `info`
+   ![image](https://github.com/user-attachments/assets/4a3c5049-d086-49c1-987a-c5f1b938f0d0)
+   создайте в ней файл `info.json`
+   ![image](https://github.com/user-attachments/assets/0a105afb-7f05-4e00-acdb-043ec9d178d5)
+   напишите в нём следущий текст:
+   <details>
+      <summary>тут код сервера (нажмите чтобы развернуть)</summary>
 
-3. w
-4. Впишите код:
+
+
+6. Впишите код:
    <details>
       <summary>тут код сервера (нажмите чтобы развернуть)</summary>
 
