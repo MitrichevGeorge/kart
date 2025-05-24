@@ -145,6 +145,7 @@ curl -sSL https://raw.githubusercontent.com/mitrichevgeorge/kart/main/install.sh
       }
       ```
    </details>
+   
    Далее вы можете изменить физические константы. А затем нажмите `сохранить`
    
    ![image](https://github.com/user-attachments/assets/9c1e3c2c-20ae-43a2-95bd-99aa894d2fa6)
