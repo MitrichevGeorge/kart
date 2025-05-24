@@ -25,7 +25,7 @@ curl -sSL https://raw.githubusercontent.com/mitrichevgeorge/kart/main/install.sh
 2. <img src="https://github.com/user-attachments/assets/e8c7606f-ba60-48e7-900e-fe6c63467862" style="height: 1em; width: 1em; vertical-align: middle;" /> (200,200,200) - [Стена](#стена)
 3. <img src="https://github.com/user-attachments/assets/4e452f41-556b-4e98-84f9-e61864ee77db" style="height: 1em; width: 1em; vertical-align: middle;" /> (50,200,0) - [Спавн](#спавн)
 4. <img src="https://github.com/user-attachments/assets/59b500a1-1bdb-4b86-8fe6-6c186491250b" style="height: 1em; width: 1em; vertical-align: middle;" /> (180,180,0) - [Песок](#песок)
-5. <img src="https://github.com/user-attachments/assets/e47349ef-5270-44bf-9ca7-13bb6efe12bc" style="height: 1em; width: 1em; vertical-align: middle;" /> (0,200,50) - [Стена с повышенным отскоком](#)
+5. <img src="https://github.com/user-attachments/assets/e47349ef-5270-44bf-9ca7-13bb6efe12bc" style="height: 1em; width: 1em; vertical-align: middle;" /> (0,200,50) - [Стена с повышенным отскоком](#пружинная-стена)
 
 #### Пол
 Базовая поверхноость. По нему может спокойно кататься машинка и иметь иннерцию
@@ -49,18 +49,37 @@ curl -sSL https://raw.githubusercontent.com/mitrichevgeorge/kart/main/install.sh
 На физику не влияет, по сути как [пол](#пол). Указывает системе, где должна появиться машинка
 
 #### Песок
-Замедляет машинку и её иннерцию, по немуможно ездить.
-
+Замедляет машинку и её иннерцию, по нему можно ездить.
+![20d2eda006b54ac79b961103f586cfe8](https://github.com/user-attachments/assets/2383e060-435f-4d48-8eb5-9486eea228bd)
 | | |
 |---|---|
 | Пройти насквозь | можно |
 | Урон | нет |
 | Отскок | нет |
 
+#### Пружинная стена
+Как и у обычной стены, от неё получаешь урон и невозможно пройти, но отскок больше и урон меньше
+![b81078e6c6c34f4abde96bf97ffd0f12](https://github.com/user-attachments/assets/5528daa3-b728-41b9-a175-fe3f6f64d39e)
+| | |
+|---|---|
+| Пройти насквозь | невозможно |
+| Урон | небольшой |
+| Отскок | есть |
+
+
 ## Добавление собственной карты(сервера)
-1. зарегистрируйтесь в <img src="https://www.pythonanywhere.com/static/anywhere/images/PA-logo.svg" style="height: 1em; vertical-align: middle;" />[python any where](https://pythonanywhere.com)
-2. w
-3. Впишите код:
+1. зарегистрируйтесь в <img src="https://www.pythonanywhere.com/static/anywhere/images/PA-logo.svg" style="height: 1em; vertical-align: middle;" />[python any where](https://www.pythonanywhere.com/login)
+   ![image](https://github.com/user-attachments/assets/f15ca967-9582-4144-9035-4fc9b50840c4)
+   ![image](https://github.com/user-attachments/assets/18415712-c6f0-4166-a521-62e209b38495)
+   ![image](https://github.com/user-attachments/assets/4e678c99-1659-43c2-a1b4-4304a457ef8c)
+   ![image](https://github.com/user-attachments/assets/b6f479c8-3f57-4082-b4b0-286b73081187)
+   переходим в почту
+   ![image](https://github.com/user-attachments/assets/a3eac0d7-55d7-409b-9692-2eee3bdd2d08)
+   ![image](https://github.com/user-attachments/assets/38602484-b65b-4dff-a7db-d7922b7131bb)
+
+
+3. w
+4. Впишите код:
    <details>
       <summary>тут код сервера (нажмите чтобы развернуть)</summary>
 
