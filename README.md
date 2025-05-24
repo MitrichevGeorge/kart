@@ -87,6 +87,7 @@ curl -sSL https://raw.githubusercontent.com/mitrichevgeorge/kart/main/install.sh
    напишите в нём следущий текст:
    <details>
       <summary>info.json (нажмите чтобы развернуть)</summary>
+      
       ``` json
       {
           "ACCELERATION": 0.3,
@@ -140,8 +141,12 @@ curl -sSL https://raw.githubusercontent.com/mitrichevgeorge/kart/main/install.sh
       }
       ```
    </details>
-   Нажмите `сохранить`
+   Далее вы можете изменить физические константы. А затем нажмите `сохранить`
+   
    ![image](https://github.com/user-attachments/assets/9c1e3c2c-20ae-43a2-95bd-99aa894d2fa6)
+   Вернитесь в папку `info` и загрузите карту
+   ![image](https://github.com/user-attachments/assets/ab46019e-45b6-48f3-a02f-418ec39b1ee1)
+
 
 6. Впишите код:
    <details>
