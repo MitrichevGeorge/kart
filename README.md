@@ -86,9 +86,62 @@ curl -sSL https://raw.githubusercontent.com/mitrichevgeorge/kart/main/install.sh
    ![image](https://github.com/user-attachments/assets/0a105afb-7f05-4e00-acdb-043ec9d178d5)
    напишите в нём следущий текст:
    <details>
-      <summary>тут код сервера (нажмите чтобы развернуть)</summary>
-
-
+      <summary>info.json (нажмите чтобы развернуть)</summary>
+      ``` json
+      {
+          "ACCELERATION": 0.3,
+          "DECELERATION": 0.04,
+          "MAX_SPEED": 10,
+          "TURN_ACCELERATION": 0.01,
+          "ROTATIONAL_FRICTION": 0.04,
+          "MAX_ANGULAR_VELOCITY": 0.40,
+          "SAND_SLOWDOWN": 0.9,
+          "SAND_INERTIA_LOSS": 0.08,
+          "WALL_BOUNCE": 0.3,
+          "FRICTION": 0.3,
+          "TRAIL_FADE_RATE": 0.99,
+          "MIN_SPEED_FOR_TURN": 0.5,
+          "LOW_SPEED_TURN_FACTOR": 0.3,
+          "HIGH_SPEED_DRIFT_FACTOR": 0.3,
+          "DRIFT_FACTOR_ON_SHIFT": 0.8,
+          "CAR_COLLISION_BOUNCE": 0.5,
+          "MIN_SPAWN_DISTANCE": 30,
+          "BLEND_FACTOR": 0.5,
+          "MAX_HEALTH": 20,
+          "DAMAGE_SCALING": 0.5,
+          "SPAWN_PROTECTION_TIME": 2.0,
+          "HEALTH_BAR_WIDTH": 40,
+          "HEALTH_BAR_HEIGHT": 6,
+          "HEALTH_BAR_OFFSET": 0,
+          "NITRO_BAR_OFFSET": 8,
+          "NAME_OFFSET": 30,
+          "SMOKE_HEALTH_THRESHOLD": 9,
+          "SMOKE_EMISSION_RATE": 0.1,
+          "SMOKE_LIFETIME": 1.0,
+          "SMOKE_SPEED": 10,
+          "POPUP_LIFETIME": 1.0,
+          "POPUP_SPEED": 20,
+          "EXPLOSION_LIFETIME": 0.5,
+          "EXPLOSION_SIZE": 40,
+          "CORPSE_LIFETIME": 3.0,
+          "SPARK_EMISSION_RATE": 0.1,
+          "SPARK_LIFETIME": 0.3,
+          "SPARK_SPEED": 15,
+          "SPARK_ALPHA_THRESHOLD": 50,
+          "NITRO_MAX": 100,
+          "NITRO_REGEN_RATE": 10,
+          "NITRO_CONSUMPTION_RATE": 50,
+          "NITRO_BOOST_FACTOR": 3.0,
+          "NITRO_LOW_THRESHOLD": 10,
+          "NITRO_LOW_SLOWDOWN": 0.7,
+          "NITRO_LOW_DAMAGE": 0.5,
+          "NITRO_FLAME_EMISSION_RATE": 0.05,
+          "NITRO_VISIBILITY_THRESHOLD": 0.95
+      }
+      ```
+   </details>
+   Нажмите `сохранить`
+   ![image](https://github.com/user-attachments/assets/9c1e3c2c-20ae-43a2-95bd-99aa894d2fa6)
 
 6. Впишите код:
    <details>
