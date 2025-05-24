@@ -27,6 +27,12 @@ curl -sSL https://raw.githubusercontent.com/mitrichevgeorge/kart/main/install.sh
 4. <img src="https://github.com/user-attachments/assets/59b500a1-1bdb-4b86-8fe6-6c186491250b" style="height: 1em; width: 1em; vertical-align: middle;" /> (180,180,0) - Песок
 5. <img src="https://github.com/user-attachments/assets/e47349ef-5270-44bf-9ca7-13bb6efe12bc" style="height: 1em; width: 1em; vertical-align: middle;" /> (0,200,50) - Стена с повышенным отскоком
 
+#### Пол
+
+## Добавление собственной карты(сервера)
+1. зарегистрируйтесь в <img src="https://www.pythonanywhere.com/static/anywhere/images/PA-logo.svg" style="height: 1em; vertical-align: middle;" />[python any where](pythonanywhere.com)
+2. 
+
 
  
 
