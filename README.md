@@ -78,7 +78,11 @@ curl -sSL https://raw.githubusercontent.com/mitrichevgeorge/kart/main/install.sh
    ![image](https://github.com/user-attachments/assets/38602484-b65b-4dff-a7db-d7922b7131bb)
 
 3. создайте карту
-4. загрузите файлы
+   Просто в `paint`. Например так:
+   ![image](https://github.com/user-attachments/assets/ad621a33-20c9-432a-a02f-6454b62ae1ce)
+   затем сохраните её в `.png` файл
+
+5. загрузите файлы
    ![image](https://github.com/user-attachments/assets/c43d3bb1-40d0-49a5-88da-a90d03f9e0dc)
    создайте папку `info`
    ![image](https://github.com/user-attachments/assets/4a3c5049-d086-49c1-987a-c5f1b938f0d0)
@@ -146,9 +150,11 @@ curl -sSL https://raw.githubusercontent.com/mitrichevgeorge/kart/main/install.sh
    ![image](https://github.com/user-attachments/assets/9c1e3c2c-20ae-43a2-95bd-99aa894d2fa6)
    Вернитесь в папку `info` и загрузите карту
    ![image](https://github.com/user-attachments/assets/ab46019e-45b6-48f3-a02f-418ec39b1ee1)
+   ![Uploading image.png…]()
 
 
-6. Впишите код:
+
+7. Впишите код:
    <details>
       <summary>тут код сервера (нажмите чтобы развернуть)</summary>
 
