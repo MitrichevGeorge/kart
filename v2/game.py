@@ -689,7 +689,9 @@ class Car:
 
         new_x = self.x + self.velocity_x
         new_y = self.y + self.velocity_y
-        if get_surface_color(new_x, new_y) == COLOR_WALL:
+
+        nsc = get_surface_color(new_x, new_y)
+        if nsc == COLOR_WALL:
             old_velocity = math.sqrt(self.velocity_x**2 + self.velocity_y**2)
             self.velocity_x *= -PHYSICS_PARAMS['WALL_BOUNCE']
             self.velocity_y *= -PHYSICS_PARAMS['WALL_BOUNCE']
@@ -701,7 +703,7 @@ class Car:
             self.health = max(0, self.health - damage)
             self.speed *= PHYSICS_PARAMS['WALL_BOUNCE']
             self.angular_velocity *= PHYSICS_PARAMS['WALL_BOUNCE']
-        elif get_surface_color(new_x, new_y) == COLOR_SPRING_WALL:
+        elif nsc == COLOR_SPRING_WALL:
             old_velocity = math.sqrt(self.velocity_x**2 + self.velocity_y**2)
             if old_velocity > 0.001:
                 normal_x = -self.velocity_x / old_velocity
@@ -1018,7 +1020,8 @@ def main(local_car, camera):
     last_zoom = -1
     scaled_map = None
     scaled_trails = None
-    
+    fade_counter = 0
+
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -1140,11 +1143,14 @@ def main(local_car, camera):
                 if pid != PLAYER_ID:
                     check_collision(local_car, data['car'])
 
-        faded_surface = pygame.Surface((MAP_WIDTH, MAP_HEIGHT), pygame.SRCALPHA)
-        faded_surface.blit(trail_surface, (0, 0))
-        faded_surface.set_alpha(int(255 * PHYSICS_PARAMS['TRAIL_FADE_RATE']))
-        trail_surface.fill((0, 0, 0, 0))
-        trail_surface.blit(faded_surface, (0, 0))
+        fade_counter += 1
+        if fade_counter >= 10:
+            faded_surface = pygame.Surface((MAP_WIDTH, MAP_HEIGHT), pygame.SRCALPHA)
+            faded_surface.blit(trail_surface, (0, 0))
+            faded_surface.set_alpha(int(255 * PHYSICS_PARAMS['TRAIL_FADE_RATE'] * 10))
+            trail_surface.fill((0, 0, 0, 0))
+            trail_surface.blit(faded_surface, (0, 0))
+            fade_counter = 0
         
         with network_lock:
             for pid, data in other_players.items():
