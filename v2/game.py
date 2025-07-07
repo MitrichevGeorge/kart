@@ -45,8 +45,6 @@ ARROW_COLOR = (255, 255, 0, 128)
 ARROW_LENGTH = 20
 ARROW_THICKNESS = 3
 ARROW_OFFSET = CAR_WIDTH
-BUTTON_COLOR = (0, 200, 0)
-BUTTON_HOVER_COLOR = (0, 150, 0)
 
 PHYSICS_PARAMS = {}
 
@@ -54,6 +52,9 @@ trail_surface = None
 map_image = None
 MAP_WIDTH = 0
 MAP_HEIGHT = 0
+
+BUTTON_COLOR = (0, 200, 0)
+BUTTON_HOVER_COLOR = (0, 150, 0)
 
 SERVER_URL = None
 PLAYER_ID = None
@@ -65,12 +66,6 @@ MAX_CONNECTION_ATTEMPTS = 3
 connection_established = False
 is_paused = False
 is_game_paused = False
-
-COLOR_OPTIONS = [
-    (255, 0, 0), (0, 255, 0), (0, 0, 255),
-    (255, 255, 0), (255, 0, 255), (0, 255, 255),
-    (128, 128, 128)
-]
 
 checkpoints = {}
 total_checkpoints = 0
@@ -148,9 +143,12 @@ class Camera:
             surface,
             (int(surface.get_width() * self.zoom), int(surface.get_height() * self.zoom))
         )
+        return scaled_surface
+
+    def getpos(self, pos):
         screen_x = (pos[0] - self.x) * self.zoom + WINDOW_WIDTH / 2
         screen_y = (pos[1] - self.y) * self.zoom + WINDOW_HEIGHT / 2
-        return scaled_surface, (screen_x, screen_y)
+        return screen_x, screen_y
 
 def is_valid_color(color):
     r, g, b = color
@@ -991,6 +989,7 @@ def attempt_game_start(player_name, player_color, server_url):
     SERVER_URL = server_url
     load_session_data()
     session_data['name'] = player_name
+    pygame.display.set_caption(f"Karting Game - {player_name} - {server_url}")
     if not load_map_and_params(server_url):
         return None, None, None
     find_checkpoints()
@@ -1015,12 +1014,16 @@ def main(local_car, camera):
     last_time = tms.time()
     show_laps_leaderboard_flag = False
     show_times_leaderboard_flag = False
+
+    last_zoom = -1
+    scaled_map = None
+    scaled_trails = None
     
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 # save_config(local_car.name, local_car.color, SERVER_URL, [local_car.x, local_car.y])
-                # save_session_data()
+                save_session_data()
                 pygame.quit()
                 sys.exit()
             elif event.type == pygame.MOUSEWHEEL:
@@ -1047,7 +1050,7 @@ def main(local_car, camera):
                         show_times_leaderboard_flag = True
                         show_laps_leaderboard_flag = False
                     elif exit_button.collidepoint(event.pos):
-                        save_config(local_car.name, local_car.color, SERVER_URL, [local_car.x, local_car.y])
+                        #save_config(local_car.name, local_car.color, SERVER_URL, [local_car.x, local_car.y])
                         save_session_data()
                         return False
                     elif show_laps_leaderboard_flag:
@@ -1064,25 +1067,17 @@ def main(local_car, camera):
                     show_laps_leaderboard_flag = False
                     show_times_leaderboard_flag = False
 
-        if is_paused:
-            screen.fill((0, 0, 0))
-            visible_width = int(WINDOW_WIDTH / camera.zoom)
-            visible_height = int(WINDOW_HEIGHT / camera.zoom)
-            visible_x = int(camera.x - visible_width / 2)
-            visible_y = int(camera.y - visible_height / 2)
-            visible_x = max(0, min(visible_x, MAP_WIDTH - visible_width))
-            visible_y = max(0, min(visible_y, MAP_HEIGHT - visible_height))
-            visible_width = min(visible_width, MAP_WIDTH - visible_x)
-            visible_height = min(visible_height, MAP_HEIGHT - visible_y)
+        if last_zoom != camera.zoom:
+            scaled_map = camera.apply_surface_transform(map_image, (0, 0))
+            scaled_trails = camera.apply_surface_transform(trail_surface, (0, 0))
+            last_zoom = camera.zoom
+        map_pos = camera.getpos((0, 0))
 
-            map_rect = pygame.Rect(visible_x, visible_y, visible_width, visible_height)
-            cropped_map = map_image.subsurface(map_rect)
-            cropped_trails = trail_surface.subsurface(map_rect)
-            
-            scaled_map, map_pos = camera.apply_surface_transform(cropped_map, (visible_x, visible_y))
-            screen.blit(scaled_map, map_pos)
-            scaled_trails, trails_pos = camera.apply_surface_transform(cropped_trails, (visible_x, visible_y))
-            screen.blit(scaled_trails, trails_pos)
+        screen.fill((0, 0, 0))
+        screen.blit(scaled_map, map_pos)
+        screen.blit(scaled_trails, map_pos)
+
+        if is_paused:
             
             with network_lock:
                 for pid, data in other_players.items():
@@ -1104,25 +1099,6 @@ def main(local_car, camera):
             continue
 
         if is_game_paused:
-            screen.fill((0, 0, 0))
-            visible_width = int(WINDOW_WIDTH / camera.zoom)
-            visible_height = int(WINDOW_HEIGHT / camera.zoom)
-            visible_x = int(camera.x - visible_width / 2)
-            visible_y = int(camera.y - visible_height / 2)
-            visible_x = max(0, min(visible_x, MAP_WIDTH - visible_width))
-            visible_y = max(0, min(visible_y, MAP_HEIGHT - visible_height))
-            visible_width = min(visible_width, MAP_WIDTH - visible_x)
-            visible_height = min(visible_height, MAP_HEIGHT - visible_y)
-
-            map_rect = pygame.Rect(visible_x, visible_y, visible_width, visible_height)
-            cropped_map = map_image.subsurface(map_rect)
-            cropped_trails = trail_surface.subsurface(map_rect)
-            
-            scaled_map, map_pos = camera.apply_surface_transform(cropped_map, (visible_x, visible_y))
-            screen.blit(scaled_map, map_pos)
-            scaled_trails, trails_pos = camera.apply_surface_transform(cropped_trails, (visible_x, visible_y))
-            screen.blit(scaled_trails, trails_pos)
-            
             with network_lock:
                 for pid, data in other_players.items():
                     if pid != PLAYER_ID:
@@ -1169,26 +1145,6 @@ def main(local_car, camera):
         faded_surface.set_alpha(int(255 * PHYSICS_PARAMS['TRAIL_FADE_RATE']))
         trail_surface.fill((0, 0, 0, 0))
         trail_surface.blit(faded_surface, (0, 0))
-
-        screen.fill((0, 0, 0))
-
-        visible_width = int(WINDOW_WIDTH / camera.zoom)
-        visible_height = int(WINDOW_HEIGHT / camera.zoom)
-        visible_x = int(camera.x - visible_width / 2)
-        visible_y = int(camera.y - visible_height / 2)
-        visible_x = max(0, min(visible_x, MAP_WIDTH - visible_width))
-        visible_y = max(0, min(visible_y, MAP_HEIGHT - visible_y))
-        visible_width = min(visible_width, MAP_WIDTH - visible_x)
-        visible_height = min(visible_height, MAP_HEIGHT - visible_y)
-
-        map_rect = pygame.Rect(visible_x, visible_y, visible_width, visible_height)
-        cropped_map = map_image.subsurface(map_rect)
-        cropped_trails = trail_surface.subsurface(map_rect)
-        
-        scaled_map, map_pos = camera.apply_surface_transform(cropped_map, (visible_x, visible_y))
-        screen.blit(scaled_map, map_pos)
-        scaled_trails, trails_pos = camera.apply_surface_transform(cropped_trails, (visible_x, visible_y))
-        screen.blit(scaled_trails, trails_pos)
         
         with network_lock:
             for pid, data in other_players.items():
@@ -1213,6 +1169,11 @@ def main(local_car, camera):
         ping_surface = font.render(ping_text, True, (255, 255, 255))
         ping_pos = (WINDOW_WIDTH - ping_surface.get_width() - 10, 10)
         render_text_with_outline(ping_text, font, (255, 255, 255), ping_pos, camera=None)
+        
+        fps_text = f"FPS: {int(clock.get_fps())}"
+        fps_surface = font.render(fps_text, True, (255, 255, 255))
+        fps_pos = (WINDOW_WIDTH - fps_surface.get_width() - 10, 30)
+        render_text_with_outline(fps_text, font, (255, 255, 255), fps_pos, camera=None)
 
         checkpoint_text = f"Checkpoints: {local_car.checkpoints_passed} / {total_checkpoints}"
         lap_text = f"Lap: {local_car.lap_count}"
